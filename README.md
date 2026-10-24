@@ -41,7 +41,9 @@ OAuth задаётся при сборке: скопируйте `.env.example` 
 **Через сайт Oats** (репозиторий `oats-site`, Cloudflare Worker) — `MAIN_VITE_AUTH_URL=https://<сайт>`. OAuth-клиенты
 и их секреты живут на сайте: он открывает страницу согласия, служит Redirect URI (`https://<сайт>/auth/callback`),
 пересылает ответ на локальный порт приложения и добавляет секрет к обмену кода и обновлению токенов. В приложении
-нет ни client ID, ни секретов; Google-клиент — типа **Web application**. Настройка — в README сайта.
+нет ни client ID, ни секретов; Google-клиент — типа **Web application**. Настройка — в README сайта. Сборки в
+GitHub Actions (там `.env` нет) идут этим путём: `build.yml` задаёт `MAIN_VITE_AUTH_URL` — по умолчанию
+`https://oats-site.azbykov.workers.dev`, другой адрес задаётся переменной репозитория `MAIN_VITE_AUTH_URL`.
 
 **Напрямую** — свои клиенты в приложении:
 
@@ -120,11 +122,11 @@ npm run dist:mac-x64
 Релиз — тег с версией из `package.json` (иначе `publish` остановится):
 
 ```bash
-git tag v0.1.0
+git tag v0.1.1
 ```
 
 ```bash
-git push origin v0.1.0
+git push origin v0.1.1
 ```
 
 Файлы отдаёт воркер лендинга (`oats-site`, маршрут `/download/*` с привязкой к бакету), так что свой домен и CORS не

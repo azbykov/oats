@@ -24,6 +24,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
+# .env isn't in the repo, so the builds get their sign-in setup here: Google and Yandex go
+# through the Oats site's Worker, which holds the OAuth secrets. Override with the
+# repository variable MAIN_VITE_AUTH_URL.
+env:
+  MAIN_VITE_AUTH_URL: ${{ vars.MAIN_VITE_AUTH_URL || 'https://oats-site.azbykov.workers.dev' }}
+
 jobs:
   windows:
     runs-on: windows-latest
