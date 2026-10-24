@@ -67,10 +67,10 @@ Node-сайдкар можно запустить и на Mac (например,
 Один раз в Cloudflare:
 
 1. **R2 → Create bucket**, например `oats-downloads` (другое имя — задайте переменной репозитория `R2_BUCKET`).
-2. Бакет → **Settings → Custom Domains** → поддомен лендинга, например `download.<домен>`. Публичный `r2.dev` только
-   для проверки: у него ограничена частота запросов.
-3. Если лендинг читает `version.json` с другого домена — бакет → **CORS policy**: `GET` с origin лендинга.
-4. **R2 → Manage API tokens → Create API token**: Object Read & Write, только этот бакет.
+2. **R2 → Manage API tokens → Create API token**: Object Read & Write, только этот бакет.
+
+Когда появится свой домен, можно вместо воркера подключить его к бакету напрямую (**Settings → Custom Domains**);
+публичный `r2.dev` годится только для проверки — у него ограничена частота запросов.
 
 В GitHub → **Settings → Secrets and variables → Actions**: секреты `R2_ACCOUNT_ID` (ID аккаунта Cloudflare),
 `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` из токена.
@@ -85,8 +85,10 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Ссылки для лендинга: `https://download.<домен>/latest/Oats-Setup.exe` и `https://download.<домен>/latest/Oats-mac-arm64.zip`.
-`latest/*` кешируются на 5 минут, `releases/*` — навсегда. Пока сборки не подписаны, на странице стоит предупредить про
+Файлы отдаёт воркер лендинга (`oats-site`, маршрут `/download/*` с привязкой к бакету), так что свой домен и CORS не
+нужны: `https://oats-site.azbykov.workers.dev/download/latest/Oats-Setup.exe`,
+`…/download/latest/Oats-mac-arm64.zip`, `…/download/latest/version.json`. Браузеры держат `latest/*` в кеше 5 минут,
+`releases/*` — навсегда; на `workers.dev` CDN-кеша нет, каждая загрузка — одно чтение из R2. Пока сборки не подписаны, на странице стоит предупредить про
 SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 
 ## Что есть
