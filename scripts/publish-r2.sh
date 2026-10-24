@@ -15,7 +15,15 @@ set -euo pipefail
 
 tag=${1:?usage: publish-r2.sh <tag> <dir>}
 dir=${2:?usage: publish-r2.sh <tag> <dir>}
-: "${R2_ACCOUNT_ID:?}" "${R2_ACCESS_KEY_ID:?}" "${R2_SECRET_ACCESS_KEY:?}" "${R2_BUCKET:?}"
+missing=()
+for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+  [[ -n ${!name:-} ]] || missing+=("$name")
+done
+if ((${#missing[@]})); then
+  echo "Not set: ${missing[*]}" >&2
+  echo "Add them as repository secrets (Settings → Secrets and variables → Actions → Secrets), not environment secrets." >&2
+  exit 1
+fi
 
 version=${tag#v}
 exe="$dir/Oats-Setup-$version.exe"
