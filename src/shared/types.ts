@@ -210,6 +210,11 @@ export type AsrEvent =
     }
   | { type: 'error'; message: string }
 
+/** A newer release: offered as a download, or (Windows) already downloaded and installed on restart. */
+export type UpdateState =
+  | { status: 'available'; version: string; downloadUrl: string }
+  | { status: 'ready'; version: string }
+
 export type AiProvider = 'anthropic' | 'openai'
 
 export interface Settings {

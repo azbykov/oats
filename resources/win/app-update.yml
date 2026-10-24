@@ -1,0 +1,5 @@
+# electron-updater reads its download cache folder from this file. The feed itself
+# is set at runtime from MAIN_VITE_UPDATE_URL (src/main/updates.ts).
+provider: generic
+url: https://oats.invalid/download/latest
+updaterCacheDirName: oats-updater

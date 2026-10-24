@@ -57,6 +57,10 @@ win:
   target:
     - target: nsis
       arch: x64
+  # Needed by electron-updater on Windows; electron-builder only writes it when publishing.
+  extraResources:
+    - from: resources/win/app-update.yml
+      to: app-update.yml
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

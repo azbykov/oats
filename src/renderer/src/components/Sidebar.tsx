@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { isMac, shortcut } from '../lib/platform'
 import { useStore } from '../lib/store'
 import { Avatar, DancingBars, IconButton, Kbd } from './ui'
+import { UpdateCard } from './UpdateCard'
 
 function NavItem({
   icon,
@@ -130,6 +131,8 @@ export function Sidebar() {
           </p>
         )}
       </div>
+
+      <UpdateCard />
 
       {recordingNote && (
         <button

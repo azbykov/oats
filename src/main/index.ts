@@ -42,6 +42,7 @@ import { closeMeetingPill, initMeetingPill, showMeetingPill } from './pill'
 import * as recordings from './recordings'
 import { audioHelper } from './sidecar'
 import { flushData, loadData, saveData } from './store'
+import { installUpdate, startUpdateChecks, updateState } from './updates'
 
 // Lets a second copy (or a test run) keep its data separate.
 if (process.env.OATS_USER_DATA) app.setPath('userData', process.env.OATS_USER_DATA)
@@ -283,6 +284,8 @@ function setupIpc() {
   ipcMain.on('open-external', (_e, url: string) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)
   })
+  ipcMain.handle('update:get', () => updateState())
+  ipcMain.on('update:install', () => installUpdate())
 }
 
 app.setName('Oats')
@@ -300,6 +303,7 @@ app.whenReady().then(() => {
   })
   createWindow()
   setMeetingDetection(data.settings.detectMeetings, meetingHandlers)
+  startUpdateChecks()
   nativeTheme.on('updated', syncWindowColors)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

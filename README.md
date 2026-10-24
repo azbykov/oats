@@ -105,7 +105,9 @@ npm run dist:mac-x64
 
 На тегах `v*` job `publish` в `build.yml` кладёт все три сборки в бакет R2 (`scripts/publish-r2.sh`, S3 API):
 `releases/<тег>/…` — неизменяемая копия каждой версии, `latest/Oats-Setup.exe`, `latest/Oats-mac-arm64.zip` и
-`latest/Oats-mac-x64.zip` — то, на что ссылаются кнопки лендинга, `latest/version.json` — версия, дата, размеры и SHA-256. Исходящий трафик R2
+`latest/Oats-mac-x64.zip` — то, на что ссылаются кнопки лендинга, `latest/version.json` — версия, дата, размеры и SHA-256 (по нему приложение показывает карточку «Oats X» с
+кнопкой Download), `latest/latest.yml` — фид `electron-updater`: Windows сам скачивает установщик и ставит его при
+перезапуске. Исходящий трафик R2
 бесплатный; в Pages файлы такого размера не помещаются (лимит 25 МиБ на файл).
 
 Один раз в Cloudflare:

@@ -8,7 +8,9 @@
 #   latest/Oats-Setup.exe       what the "Download" buttons point at
 #   latest/Oats-mac-arm64.zip
 #   latest/Oats-mac-x64.zip
-#   latest/version.json         version, date, sizes and SHA-256 for the page to show
+#   latest/version.json         version, date, sizes and SHA-256 for the page and the
+#                               app's "new version" card
+#   latest/latest.yml           electron-updater's feed for Windows auto-update
 #
 # Needs R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET, and the
 # aws CLI (R2 speaks the S3 API; wrangler's single upload is too small for these files).
@@ -72,6 +74,23 @@ cat > "$manifest" <<EOF
 EOF
 aws s3 cp "$manifest" "s3://$R2_BUCKET/latest/version.json" --endpoint-url "$endpoint" --only-show-errors \
   --content-type application/json --cache-control "$fresh"
+
+# electron-updater resolves the installer's path against latest/, so Windows downloads
+# the release's immutable copy rather than latest/Oats-Setup.exe.
+installer="../releases/$tag/$(basename "$exe")"
+sha512=$(openssl dgst -sha512 -binary "$exe" | base64 | tr -d '\n')
+cat > "$manifest" <<EOF
+version: $version
+files:
+  - url: $installer
+    sha512: $sha512
+    size: $(wc -c < "$exe" | tr -d ' ')
+path: $installer
+sha512: $sha512
+releaseDate: '$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'
+EOF
+aws s3 cp "$manifest" "s3://$R2_BUCKET/latest/latest.yml" --endpoint-url "$endpoint" --only-show-errors \
+  --content-type text/yaml --cache-control "$fresh"
 rm -f "$manifest"
 
 echo "Published $tag to $R2_BUCKET:"
@@ -79,5 +98,5 @@ cat <<EOF
   releases/$tag/$(basename "$exe")
   releases/$tag/Oats-mac-arm64-$version.zip
   releases/$tag/Oats-mac-x64-$version.zip
-  latest/Oats-Setup.exe, latest/Oats-mac-arm64.zip, latest/Oats-mac-x64.zip, latest/version.json
+  latest/Oats-Setup.exe, latest/Oats-mac-arm64.zip, latest/Oats-mac-x64.zip, latest/version.json, latest/latest.yml
 EOF

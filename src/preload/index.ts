@@ -18,6 +18,7 @@ import type {
   PillState,
   RecordingMeta,
   RecoveredSegment,
+  UpdateState,
   WhisperModel
 } from '../shared/types'
 
@@ -84,6 +85,9 @@ const api = {
   exportMarkdown: (name: string, markdown: string): Promise<boolean> =>
     ipcRenderer.invoke('export:markdown', name, markdown),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
+  getUpdate: (): Promise<UpdateState | null> => ipcRenderer.invoke('update:get'),
+  onUpdate: (cb: (state: UpdateState) => void) => on('update:state', cb),
+  installUpdate: () => ipcRenderer.send('update:install'),
   onMenu: (name: 'new-note' | 'search' | 'settings', cb: () => void) => on(`menu:${name}`, cb)
 }
 
