@@ -1,0 +1,331 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Palette extracted from Granola's "oats" design tokens (index-*.css). */
+@theme {
+  --color-oats-neutral-50: #fcfcf8;
+  --color-oats-neutral-100: #f7f7f2;
+  --color-oats-neutral-150: #f2f2ec;
+  --color-oats-neutral-200: #eaebe5;
+  --color-oats-neutral-300: #d5d5d2;
+  --color-oats-neutral-400: #acada8;
+  --color-oats-neutral-500: #818179;
+  --color-oats-neutral-600: #72726e;
+  --color-oats-neutral-700: #4e4d4b;
+  --color-oats-neutral-750: #363635;
+  --color-oats-neutral-800: #292929;
+  --color-oats-neutral-900: #212121;
+  --color-oats-neutral-950: #1e1e1e;
+  --color-oats-green-50: #f2f6e1;
+  --color-oats-green-100: #e5eacd;
+  --color-oats-green-200: #d1e043;
+  --color-oats-green-300: #b2c248;
+  --color-oats-green-400: #788c15;
+  --color-oats-green-500: #5b6f00;
+  --color-oats-green-600: #434625;
+  --color-oats-green-700: #313225;
+  --color-oats-grass: #74bd00;
+
+  --color-surface: var(--surface);
+  --color-surface-window: var(--surface-window);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-strong: var(--ink-strong);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-tertiary: var(--ink-tertiary);
+  --color-ink-accent: var(--ink-accent);
+  --color-ink-danger: var(--ink-danger);
+  --color-fill-soft: var(--fill-soft);
+  --color-fill-soft-hover: var(--fill-soft-hover);
+  --color-fill-accent: var(--fill-accent);
+  --color-fill-accent-hover: var(--fill-accent-hover);
+  --color-fill-accent-soft: var(--fill-accent-soft);
+  --color-fill-primary: var(--fill-primary);
+  --color-fill-input: var(--fill-input);
+  --color-hairline: var(--hairline);
+  --color-event-blue: #79b7fa;
+
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'IBM Plex Serif', ui-serif, Georgia, Cambria, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  --surface: #fcfcf8;
+  --surface-window: #f7f7f2;
+  --surface-elevated: #ffffff;
+  --ink-primary: #292929;
+  --ink-strong: #1e1e1e;
+  --ink-secondary: #72726e;
+  --ink-tertiary: #acada8;
+  --ink-accent: #5b6f00;
+  --ink-danger: #bd4a30;
+  --fill-soft: #625a220f;
+  --fill-soft-hover: #56512e1f;
+  --fill-accent: #5b6f00;
+  --fill-accent-hover: #4c5616;
+  --fill-accent-soft: #788c1526;
+  --fill-primary: #292929;
+  --fill-input: #ffffff;
+  --hairline: #47432a26;
+  color-scheme: light;
+}
+
+.dark {
+  --surface: #1e1e1e;
+  --surface-window: #212121;
+  --surface-elevated: #292929;
+  --ink-primary: #fcfcf8;
+  --ink-strong: #ffffff;
+  --ink-secondary: #9e9e99;
+  --ink-tertiary: #818179;
+  --ink-accent: #b2c248;
+  --ink-danger: #ec7558;
+  --fill-soft: #ffffff0f;
+  --fill-soft-hover: #ffffff26;
+  --fill-accent: #788c15;
+  --fill-accent-hover: #8fa31f;
+  --fill-accent-soft: #b2c24833;
+  --fill-primary: #eaebe5;
+  --fill-input: #363635;
+  --hairline: #ffffff1f;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--surface-window);
+  color: var(--ink-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+/* Keeps header buttons clear of the Windows caption buttons (Window Controls
+   Overlay); without an overlay the env() fallbacks leave the usual padding. */
+.titlebar-pr {
+  padding-right: max(0.75rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)));
+}
+.no-drag,
+button,
+input,
+textarea,
+select,
+a {
+  -webkit-app-region: no-drag;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  user-select: text;
+}
+
+::selection {
+  background: var(--fill-accent-soft);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill-soft-hover) transparent;
+}
+
+/* ---------- Editor (TipTap / ProseMirror) ---------- */
+.prose-oats {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-primary);
+  outline: none;
+  user-select: text;
+}
+.prose-oats:focus {
+  outline: none;
+}
+.prose-oats > * + * {
+  margin-top: 0.35em;
+}
+.prose-oats h1,
+.prose-oats h2,
+.prose-oats h3 {
+  font-weight: 600;
+  color: var(--ink-strong);
+  line-height: 1.3;
+}
+.prose-oats h1 {
+  font-size: 1.35em;
+  margin-top: 1.1em;
+}
+.prose-oats h2 {
+  font-size: 1.18em;
+  margin-top: 1em;
+}
+.prose-oats h3 {
+  font-size: 1.05em;
+  margin-top: 1.1em;
+}
+.prose-oats > :first-child {
+  margin-top: 0;
+}
+.prose-oats ul,
+.prose-oats ol {
+  padding-left: 1.3em;
+}
+.prose-oats ul {
+  list-style: disc;
+}
+.prose-oats ul ul {
+  list-style: circle;
+}
+.prose-oats ol {
+  list-style: decimal;
+}
+.prose-oats li > p {
+  margin: 0;
+}
+.prose-oats li + li {
+  margin-top: 0.15em;
+}
+.prose-oats li::marker {
+  color: var(--ink-tertiary);
+}
+.prose-oats ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.prose-oats ul[data-type='taskList'] li {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+}
+.prose-oats ul[data-type='taskList'] li > label {
+  margin-top: 0.3em;
+}
+.prose-oats ul[data-type='taskList'] input {
+  accent-color: var(--fill-accent);
+}
+.prose-oats blockquote {
+  border-left: 2px solid var(--hairline);
+  padding-left: 0.9em;
+  color: var(--ink-secondary);
+}
+.prose-oats code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--fill-soft);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+}
+.prose-oats a {
+  color: var(--ink-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-oats p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--ink-tertiary);
+  pointer-events: none;
+  height: 0;
+}
+.prose-oats strong {
+  font-weight: 600;
+}
+
+/* Granola's signature: text the AI added is grey, what you typed stays dark. */
+.prose-oats .ai-text {
+  color: var(--ink-secondary);
+}
+.prose-oats .ai-text strong {
+  color: var(--ink-secondary);
+}
+.prose-oats .user-text {
+  color: var(--ink-strong);
+}
+
+.markdown-chat p + p,
+.markdown-chat ul,
+.markdown-chat ol {
+  margin-top: 0.5em;
+}
+.markdown-chat ul {
+  list-style: disc;
+  padding-left: 1.2em;
+}
+.markdown-chat ol {
+  list-style: decimal;
+  padding-left: 1.2em;
+}
+.markdown-chat h1,
+.markdown-chat h2,
+.markdown-chat h3 {
+  font-weight: 600;
+  margin-top: 0.8em;
+}
+.markdown-chat strong {
+  font-weight: 600;
+}
+.markdown-chat code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+@keyframes oats-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--ink-tertiary) 0%,
+    var(--ink-primary) 50%,
+    var(--ink-tertiary) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+
+/* Floating "meeting detected" window: transparent around the card. */
+html.pill,
+html.pill body {
+  background: transparent;
+}
+
+@keyframes pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

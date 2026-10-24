@@ -1,0 +1,55 @@
+# Packages Oats.app / Oats Setup.exe. A real app bundle matters on macOS: privacy
+# permissions (microphone, system audio) are granted per app, and only a bundle
+# with its own identity and usage descriptions gets the system prompts.
+appId: app.oats.desktop
+productName: Oats
+directories:
+  output: dist
+# Each platform lists its files in full (a platform `files` replaces this one): the
+# app itself, minus whisper.cpp's CUDA (~125 MB) and WASM builds (Vulkan covers
+# NVIDIA too) and the other platform's addons, which a cross-build has installed.
+files:
+  - out/**
+  - package.json
+  - "!**/node_modules/@fugood/node-whisper-*-cuda/**"
+  - "!**/node_modules/@fugood/node-whisper-wasm/**"
+# Native addons and the DLLs/dylibs next to them must be real files on disk.
+asarUnpack:
+  - "**/node_modules/sherpa-onnx-*/**"
+  - "**/node_modules/@fugood/node-whisper-*/**"
+mac:
+  target: dir
+  files:
+    - out/**
+    - package.json
+    - "!**/node_modules/@fugood/node-whisper-*-cuda/**"
+    - "!**/node_modules/@fugood/node-whisper-wasm/**"
+    - "!**/node_modules/sherpa-onnx-win-*/**"
+    - "!**/node_modules/@fugood/node-whisper-win32-*/**"
+  category: public.app-category.productivity
+  # Signed ad hoc after packaging (see the dist:mac script); no Developer ID needed locally.
+  identity: null
+  hardenedRuntime: false
+  extraResources:
+    - from: native/audio/.build/release/oats-audio
+      to: oats-audio
+    - from: native/tcc/build/Release/oats_tcc.node
+      to: oats_tcc.node
+  extendInfo:
+    NSMicrophoneUsageDescription: Oats transcribes your side of the conversation.
+    NSAudioCaptureUsageDescription: Oats transcribes the other people on your calls from system audio.
+win:
+  files:
+    - out/**
+    - package.json
+    - "!**/node_modules/@fugood/node-whisper-*-cuda/**"
+    - "!**/node_modules/@fugood/node-whisper-wasm/**"
+    - "!**/node_modules/sherpa-onnx-darwin-*/**"
+    - "!**/node_modules/@fugood/node-whisper-darwin-*/**"
+  target:
+    - target: nsis
+      arch: x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Oats-Setup-${version}.${ext}

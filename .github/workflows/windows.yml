@@ -1,0 +1,53 @@
+# Builds the Windows installer (dist/Oats-Setup-<version>.exe) on a real Windows
+# runner, where npm installs the win32 builds of whisper.cpp and sherpa-onnx, then
+# smoke-tests the packaged audio sidecar with synthesized speech.
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Build installer
+        run: npm run dist:win -- --publish never
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Oats-Setup
+          path: dist/Oats-Setup-*.exe
+          if-no-files-found: error
+
+      # 16 kHz mono 16-bit, the format the app records.
+      - name: Synthesize test speech
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $speech = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          if ($speech.GetInstalledVoices().Count -eq 0) { throw 'No Windows speech voices installed on this runner.' }
+          $format = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+          $speech.SetOutputToWaveFile("$env:RUNNER_TEMP\speech.wav", $format)
+          $speech.Speak('Hi everyone, thanks for joining the call. Let us start with the roadmap for the next quarter.')
+          $speech.Dispose()
+
+      - name: Smoke-test audio sidecar
+        shell: pwsh
+        run: node scripts/smoke-sidecar.mjs dist/win-unpacked "$env:RUNNER_TEMP\speech.wav"
