@@ -1,4 +1,4 @@
-import { shell } from 'electron'
+import { app, shell } from 'electron'
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type ServerResponse } from 'node:http'
 import type { AccountProvider } from '../shared/types'
@@ -138,6 +138,8 @@ export async function authorize(provider: AccountProvider): Promise<Tokens> {
       const code = url.searchParams.get('code')
       const ok = !error && code
       reply(res, 200, ok ? 'ok' : error === 'access_denied' ? 'cancelled' : 'error')
+      // Back from the browser: Oats comes forward instead of leaving the user on the tab.
+      app.focus({ steal: true })
       finish()
       if (ok) resolve(code)
       else reject(new OAuthError(error === 'access_denied' ? 'Sign-in was cancelled' : 'Sign-in failed', error ?? undefined))
