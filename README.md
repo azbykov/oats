@@ -38,9 +38,13 @@ npm run dist:win
 ```
 
 Надёжнее собирать на самой Windows: там `npm install` сам поставит нужные нативные пакеты. В GitHub Actions это
-делает `.github/workflows/windows.yml` — собирает установщик на `windows-latest`, кладёт его в артефакт
+делает `.github/workflows/build.yml` — собирает установщик на `windows-latest`, кладёт его в артефакт
 `Oats-Setup` и прогоняет `scripts/smoke-sidecar.mjs` (все команды сайдкара на синтезированной речи) по собранному
-приложению. При сборке на Mac сначала доставьте Windows-версии аддонов (а сам установщик соберётся только с Rosetta):
+приложению. Тот же workflow собирает `Oats.app` для Apple Silicon на `macos-26` (артефакт `Oats-mac-arm64`, zip).
+Приложение подписано ad hoc, без Developer ID и нотаризации, поэтому после скачивания снимите карантин:
+`xattr -dr com.apple.quarantine /Applications/Oats.app`.
+
+При сборке на Mac сначала доставьте Windows-версии аддонов (а сам установщик соберётся только с Rosetta):
 
 ```bash
 npm run deps:win

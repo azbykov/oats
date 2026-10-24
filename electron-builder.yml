@@ -5,6 +5,9 @@ appId: app.oats.desktop
 productName: Oats
 directories:
   output: dist
+# Builds are attached to CI runs, not published; without this electron-builder
+# infers a GitHub release target from the git remote and tries to upload on tags.
+publish: null
 # Each platform lists its files in full (a platform `files` replaces this one): the
 # app itself, minus whisper.cpp's CUDA (~125 MB) and WASM builds (Vulkan covers
 # NVIDIA too) and the other platform's addons, which a cross-build has installed.
