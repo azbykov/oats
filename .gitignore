@@ -5,3 +5,4 @@ dist
 native/audio/.build
 native/tcc/build
 *.tsbuildinfo
+native/tcc/arch

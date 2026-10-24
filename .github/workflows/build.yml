@@ -2,6 +2,8 @@
 #   Oats-Setup     dist/Oats-Setup-<version>.exe, with npm's win32 builds of whisper.cpp
 #                  and sherpa-onnx, after a smoke test of the packaged audio sidecar
 #   Oats-mac-arm64 Oats.app for Apple Silicon (Swift sidecar + TCC addon), signed ad hoc
+#   Oats-mac-x64   Oats.app for Intel Macs (Node sidecar + universal TCC addon), signed ad
+#                  hoc, after the same sidecar smoke test as Windows
 # On v* tags both are also uploaded to Cloudflare R2 for the landing page (publish job).
 name: Build
 
@@ -104,6 +106,59 @@ jobs:
         with:
           name: Oats-mac-arm64
           path: dist/Oats-mac-arm64.zip
+          if-no-files-found: error
+
+  macos-intel:
+    # A real Intel runner, so the packaged Node sidecar (whisper.cpp / sherpa-onnx) is
+    # smoke-tested on the architecture it ships for. No Swift here: Intel Macs don't
+    # use the WhisperKit helper, so this job doesn't need Xcode 26.
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # Builds the universal TCC addon, packages Oats.app for x64 and signs it ad hoc.
+      - name: Build Oats.app
+        run: npm run dist:mac-x64
+
+      - name: Check the bundle
+        run: |
+          app=dist/mac/Oats.app
+          codesign --verify --deep --strict "$app"
+          test "$(lipo -archs "$app/Contents/MacOS/Oats")" = x86_64
+          lipo -archs "$app/Contents/Resources/oats_tcc.node" | grep -q x86_64
+          test -d "$app/Contents/Resources/app.asar.unpacked/node_modules/sherpa-onnx-darwin-x64"
+          test -d "$app/Contents/Resources/app.asar.unpacked/node_modules/@fugood/node-whisper-darwin-x64"
+          # The Swift helper is Apple Silicon only and must not ship here.
+          test ! -e "$app/Contents/Resources/oats-audio"
+
+      # 16 kHz mono 16-bit, the format the app records.
+      - name: Synthesize test speech
+        run: |
+          say -o "$RUNNER_TEMP/speech.aiff" 'Hi everyone, thanks for joining the call. Let us start with the roadmap for the next quarter.'
+          afconvert -f WAVE -d LEI16@16000 -c 1 "$RUNNER_TEMP/speech.aiff" "$RUNNER_TEMP/speech.wav"
+
+      - name: Smoke-test audio sidecar
+        run: node scripts/smoke-sidecar.mjs dist/mac/Oats.app "$RUNNER_TEMP/speech.wav"
+
+      # ditto keeps the framework symlinks and signature that a plain artifact upload would break.
+      - name: Zip Oats.app
+        run: ditto -c -k --keepParent dist/mac/Oats.app dist/Oats-mac-x64.zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Oats-mac-x64
+          path: dist/Oats-mac-x64.zip
           if-no-files-found: error
 
   # Tags only: puts both builds in Cloudflare R2 behind the landing's download links.

@@ -33,9 +33,10 @@ mac:
   # Signed ad hoc after packaging (see the dist:mac script); no Developer ID needed locally.
   identity: null
   hardenedRuntime: false
+  # Per-architecture additions (Swift helper, which addons to drop) live in
+  # electron-builder.mac-arm64.yml / electron-builder.mac-x64.yml; lists there are
+  # added to these, not replacing them.
   extraResources:
-    - from: native/audio/.build/release/oats-audio
-      to: oats-audio
     - from: native/tcc/build/Release/oats_tcc.node
       to: oats_tcc.node
   extendInfo:

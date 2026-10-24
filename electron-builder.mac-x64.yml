@@ -1,0 +1,8 @@
+# Intel Mac build (npm run dist:mac-x64). Same app; audio runs on the Node sidecar
+# (whisper.cpp / sherpa-onnx, see src/main/sidecar.ts) because WhisperKit and
+# FluidAudio need Apple Silicon, so there is no Swift helper and no arm64 addons.
+extends: ./electron-builder.yml
+mac:
+  files:
+    - "!**/node_modules/sherpa-onnx-darwin-arm64/**"
+    - "!**/node_modules/@fugood/node-whisper-darwin-arm64/**"

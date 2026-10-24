@@ -40,7 +40,8 @@ npm run dist:win
 Надёжнее собирать на самой Windows: там `npm install` сам поставит нужные нативные пакеты. В GitHub Actions это
 делает `.github/workflows/build.yml` — собирает установщик на `windows-latest`, кладёт его в артефакт
 `Oats-Setup` и прогоняет `scripts/smoke-sidecar.mjs` (все команды сайдкара на синтезированной речи) по собранному
-приложению. Тот же workflow собирает `Oats.app` для Apple Silicon на `macos-26` (артефакт `Oats-mac-arm64`, zip).
+приложению. Тот же workflow собирает `Oats.app` для Apple Silicon на `macos-26` (артефакт `Oats-mac-arm64`, zip)
+и для Intel на `macos-15-intel` (артефакт `Oats-mac-x64`, zip; перед упаковкой — тот же smoke-тест сайдкара).
 Приложение подписано ad hoc, без Developer ID и нотаризации, поэтому после скачивания снимите карантин:
 `xattr -dr com.apple.quarantine /Applications/Oats.app`.
 
@@ -56,6 +57,22 @@ npm run deps:win
 первом запуске SmartScreen покажет предупреждение.
 
 Node-сайдкар можно запустить и на Mac (например, на Intel): `OATS_AUDIO_ENGINE=node npm run dev`.
+
+### Intel Mac
+
+WhisperKit и FluidAudio работают только на Apple Silicon, поэтому Intel-версия использует тот же Node-сайдкар,
+что и Windows (whisper.cpp + sherpa-onnx), и модели whisper.cpp в Settings. Системный звук и разрешения — как на
+Apple Silicon (Core Audio Tap на macOS 14.2+; модуль `native/tcc` собирается универсальным, arm64 + x86_64).
+Сборка с любого Mac, результат — `dist/mac/Oats.app`:
+
+```bash
+npm run dist:mac-x64
+```
+
+Скрипт доставляет x64-версии аддонов (`npm run deps:mac-x64`) и собирает по `electron-builder.mac-x64.yml`
+(без Swift-помощника и arm64-аддонов). Apple Silicon собирается по `electron-builder.mac-arm64.yml`
+(`npm run dist:mac`); общие настройки — в `electron-builder.yml`. На Apple Silicon Intel-сборку можно запустить
+только с установленным Rosetta.
 
 ### Загрузки на Cloudflare R2
 

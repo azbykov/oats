@@ -1,0 +1,10 @@
+# Apple Silicon build (npm run dist:mac): audio runs in the Swift helper
+# (WhisperKit / FluidAudio on the Neural Engine).
+extends: ./electron-builder.yml
+mac:
+  files:
+    - "!**/node_modules/sherpa-onnx-darwin-x64/**"
+    - "!**/node_modules/@fugood/node-whisper-darwin-x64/**"
+  extraResources:
+    - from: native/audio/.build/release/oats-audio
+      to: oats-audio
