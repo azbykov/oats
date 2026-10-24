@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import type { AiStreamEvent, ChatMessage, ChatRequest, EnhanceRequest, Settings } from '../shared/types'
+import { runCli } from './ai-cli'
 
-// Notes and chat run on either Claude (Anthropic API) or OpenAI, per Settings → AI.
+// Notes and chat run on Claude (Anthropic API), OpenAI, or the user's Claude Code / Codex CLI,
+// per Settings → AI.
 
 type Emit = (event: AiStreamEvent) => void
 
@@ -87,8 +89,11 @@ async function run(id: string, settings: Settings, system: string, messages: Cha
     emit({ type: 'delta', text: delta })
   }
   try {
-    if (settings.aiProvider === 'openai') await runOpenAI(settings, system, messages, controller.signal, push)
-    else await runAnthropic(settings, system, messages, controller.signal, push)
+    const { signal } = controller
+    if (settings.aiProvider === 'openai') await runOpenAI(settings, system, messages, signal, push)
+    else if (settings.aiProvider === 'claude-cli') await runCli('claude', settings, system, messages, signal, push)
+    else if (settings.aiProvider === 'codex-cli') await runCli('codex', settings, system, messages, signal, push)
+    else await runAnthropic(settings, system, messages, signal, push)
     emit({ type: 'done', text: out.text })
   } catch (err) {
     if (controller.signal.aborted) emit({ type: 'done', text: out.text })

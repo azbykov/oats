@@ -215,13 +215,18 @@ export type UpdateState =
   | { status: 'available'; version: string; downloadUrl: string }
   | { status: 'ready'; version: string }
 
-export type AiProvider = 'anthropic' | 'openai'
+/** API keys, or the user's own Claude Code / Codex CLI signed in with their subscription. */
+export type AiProvider = 'anthropic' | 'openai' | 'claude-cli' | 'codex-cli'
+
+export type CliStatus = { ok: true; detail: string } | { ok: false; message: string }
 
 export interface Settings {
   aiProvider: AiProvider
   anthropicApiKey: string
   openaiApiKey: string
   openaiModel: string
+  /** Model for `codex exec`; empty uses the CLI's own default. */
+  codexModel: string
   transcriptionProvider: TranscriptionProvider
   whisperModel: string
   deepgramApiKey: string

@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS: Settings = {
   anthropicApiKey: '',
   openaiApiKey: '',
   openaiModel: 'gpt-6.1-sol',
+  codexModel: '',
   transcriptionProvider: 'whisper',
   whisperModel: 'openai_whisper-large-v3-v20240930_turbo_632MB',
   deepgramApiKey: '',

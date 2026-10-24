@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { Settings, WhisperModel } from '../../../shared/types'
+import type { CliStatus, Settings, WhisperModel } from '../../../shared/types'
 import { isMac, thisComputer } from '../lib/platform'
 import { useStore } from '../lib/store'
 import { AccountsSettings } from './Accounts'
@@ -129,12 +129,17 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
 
             {tab === 'ai' && (
               <>
-                <Row label="AI provider" hint={`Used to enhance notes and answer questions. Keys are stored locally on ${thisComputer}.`}>
-                  <div className="flex gap-2">
+                <Row
+                  label="AI provider"
+                  hint={`Used to enhance notes and answer questions. API keys are stored locally on ${thisComputer}; a subscription runs through its own app installed here.`}
+                >
+                  <div className="flex flex-wrap gap-2">
                     {(
                       [
-                        ['anthropic', 'Claude (Anthropic)'],
-                        ['openai', 'OpenAI']
+                        ['anthropic', 'Claude API'],
+                        ['openai', 'OpenAI API'],
+                        ['claude-cli', 'Claude subscription'],
+                        ['codex-cli', 'ChatGPT subscription']
                       ] as const
                     ).map(([id, label]) => (
                       <Button
@@ -147,36 +152,51 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                     ))}
                   </div>
                 </Row>
-                {settings.aiProvider === 'anthropic' ? (
-                  <>
-                    <Row
-                      label="Anthropic API key"
-                      hint={
-                        <>
-                          Get one at{' '}
-                          <ExtLink href="https://console.anthropic.com/settings/keys">console.anthropic.com</ExtLink>.
-                        </>
-                      }
-                    >
-                      <input
-                        type="password"
-                        className={input}
-                        placeholder="sk-ant-…"
-                        value={settings.anthropicApiKey}
-                        onChange={(e) => set('anthropicApiKey')(e.target.value.trim())}
-                      />
-                    </Row>
-                    <Row label="Model">
-                      <select className={input} value={settings.model} onChange={(e) => set('model')(e.target.value)}>
-                        {MODELS.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-                    </Row>
-                  </>
-                ) : (
+                {settings.aiProvider === 'anthropic' && (
+                  <Row
+                    label="Anthropic API key"
+                    hint={
+                      <>
+                        Get one at{' '}
+                        <ExtLink href="https://console.anthropic.com/settings/keys">console.anthropic.com</ExtLink>.
+                      </>
+                    }
+                  >
+                    <input
+                      type="password"
+                      className={input}
+                      placeholder="sk-ant-…"
+                      value={settings.anthropicApiKey}
+                      onChange={(e) => set('anthropicApiKey')(e.target.value.trim())}
+                    />
+                  </Row>
+                )}
+                {settings.aiProvider === 'claude-cli' && (
+                  <Row
+                    label="Claude Code"
+                    hint={
+                      <>
+                        Uses your Claude Pro or Max plan through the Claude Code app, so requests count toward its usage
+                        limits. Install it from <ExtLink href="https://claude.com/claude-code">claude.com/claude-code</ExtLink>,
+                        then run <code>claude</code> in Terminal and log in.
+                      </>
+                    }
+                  >
+                    <CliStatusLine kind="claude" />
+                  </Row>
+                )}
+                {(settings.aiProvider === 'anthropic' || settings.aiProvider === 'claude-cli') && (
+                  <Row label="Model">
+                    <select className={input} value={settings.model} onChange={(e) => set('model')(e.target.value)}>
+                      {MODELS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Row>
+                )}
+                {settings.aiProvider === 'openai' && (
                   <>
                     <Row
                       label="OpenAI API key"
@@ -199,6 +219,30 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                         apiKey={settings.openaiApiKey}
                         value={settings.openaiModel}
                         onChange={set('openaiModel')}
+                      />
+                    </Row>
+                  </>
+                )}
+                {settings.aiProvider === 'codex-cli' && (
+                  <>
+                    <Row
+                      label="Codex"
+                      hint={
+                        <>
+                          Uses your ChatGPT plan through the Codex CLI, so requests count toward its usage limits. Install
+                          it with <code>npm i -g @openai/codex</code>, then run <code>codex login</code> in Terminal. Notes
+                          appear all at once instead of streaming in.
+                        </>
+                      }
+                    >
+                      <CliStatusLine kind="codex" />
+                    </Row>
+                    <Row label="Model" hint="Leave empty to use the Codex default.">
+                      <input
+                        className={input}
+                        value={settings.codexModel}
+                        onChange={(e) => set('codexModel')(e.target.value.trim())}
+                        placeholder="Codex default"
                       />
                     </Row>
                   </>
@@ -473,6 +517,29 @@ function WhisperModels({ selected, onSelect }: { selected: string; onSelect: (id
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+function CliStatusLine({ kind }: { kind: 'claude' | 'codex' }) {
+  const [status, setStatus] = useState<CliStatus | null>(null)
+  const check = () => {
+    setStatus(null)
+    window.oats.cliStatus(kind).then(setStatus)
+  }
+  useEffect(check, [kind])
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className={`min-w-0 flex-1 text-[13px] ${
+          !status ? 'text-ink-tertiary' : status.ok ? 'text-ink-primary' : 'text-ink-danger'
+        }`}
+      >
+        {!status ? 'Checking…' : status.ok ? status.detail : status.message}
+      </div>
+      <Button variant="outline" onClick={check}>
+        Check again
+      </Button>
     </div>
   )
 }
