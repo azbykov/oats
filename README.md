@@ -57,6 +57,38 @@ npm run deps:win
 
 Node-сайдкар можно запустить и на Mac (например, на Intel): `OATS_AUDIO_ENGINE=node npm run dev`.
 
+### Загрузки на Cloudflare R2
+
+На тегах `v*` job `publish` в `build.yml` кладёт обе сборки в бакет R2 (`scripts/publish-r2.sh`, S3 API):
+`releases/<тег>/…` — неизменяемая копия каждой версии, `latest/Oats-Setup.exe` и `latest/Oats-mac-arm64.zip` — то, на
+что ссылаются кнопки лендинга, `latest/version.json` — версия, дата, размеры и SHA-256. Исходящий трафик R2
+бесплатный; в Pages файлы такого размера не помещаются (лимит 25 МиБ на файл).
+
+Один раз в Cloudflare:
+
+1. **R2 → Create bucket**, например `oats-downloads` (другое имя — задайте переменной репозитория `R2_BUCKET`).
+2. Бакет → **Settings → Custom Domains** → поддомен лендинга, например `download.<домен>`. Публичный `r2.dev` только
+   для проверки: у него ограничена частота запросов.
+3. Если лендинг читает `version.json` с другого домена — бакет → **CORS policy**: `GET` с origin лендинга.
+4. **R2 → Manage API tokens → Create API token**: Object Read & Write, только этот бакет.
+
+В GitHub → **Settings → Secrets and variables → Actions**: секреты `R2_ACCOUNT_ID` (ID аккаунта Cloudflare),
+`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` из токена.
+
+Релиз — тег с версией из `package.json` (иначе `publish` остановится):
+
+```bash
+git tag v0.1.0
+```
+
+```bash
+git push origin v0.1.0
+```
+
+Ссылки для лендинга: `https://download.<домен>/latest/Oats-Setup.exe` и `https://download.<домен>/latest/Oats-mac-arm64.zip`.
+`latest/*` кешируются на 5 минут, `releases/*` — навсегда. Пока сборки не подписаны, на странице стоит предупредить про
+SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
+
 ## Что есть
 
 | Granola | Клон |

@@ -2,6 +2,7 @@
 #   Oats-Setup     dist/Oats-Setup-<version>.exe, with npm's win32 builds of whisper.cpp
 #                  and sherpa-onnx, after a smoke test of the packaged audio sidecar
 #   Oats-mac-arm64 Oats.app for Apple Silicon (Swift sidecar + TCC addon), signed ad hoc
+# On v* tags both are also uploaded to Cloudflare R2 for the landing page (publish job).
 name: Build
 
 on:
@@ -104,3 +105,26 @@ jobs:
           name: Oats-mac-arm64
           path: dist/Oats-mac-arm64.zip
           if-no-files-found: error
+
+  # Tags only: puts both builds in Cloudflare R2 behind the landing's download links.
+  # Setup (bucket, domain, secrets) is described in README → "Загрузки на Cloudflare R2".
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Upload to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'oats-downloads' }}
+        run: scripts/publish-r2.sh "$GITHUB_REF_NAME" release
