@@ -2,13 +2,15 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { Settings, WhisperModel } from '../../../shared/types'
 import { isMac, thisComputer } from '../lib/platform'
 import { useStore } from '../lib/store'
+import { AccountsSettings } from './Accounts'
 import { PermissionsList } from './Permissions'
 import { Button } from './ui'
 
-type Tab = 'general' | 'ai' | 'transcription' | 'calendar'
+type Tab = 'general' | 'accounts' | 'ai' | 'transcription' | 'calendar'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'accounts', label: 'Accounts' },
   { id: 'ai', label: 'AI' },
   { id: 'transcription', label: 'Transcription' },
   { id: 'calendar', label: 'Calendar' }
@@ -114,6 +116,15 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                   </div>
                 </Row>
               </>
+            )}
+
+            {tab === 'accounts' && (
+              <Row
+                label="Accounts"
+                hint={`Sign in with Google or Yandex to see their calendars in Coming up. Oats only reads calendars; sign-in tokens are encrypted on ${thisComputer}.`}
+              >
+                <AccountsSettings />
+              </Row>
             )}
 
             {tab === 'ai' && (
@@ -358,8 +369,17 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                 label="Calendar feed (ICS)"
                 hint={
                   <>
-                    Paste a private iCal link. Google Calendar: Settings → your calendar → “Secret address in iCal
-                    format”. Outlook: Settings → Calendar → Shared calendars → Publish.
+                    For calendars not on a connected account. Paste a private iCal link. Google Calendar: Settings →
+                    your calendar → “Secret address in iCal format”. Outlook: Settings → Calendar → Shared calendars →
+                    Publish. Google and Yandex accounts can be connected in{' '}
+                    <button
+                      type="button"
+                      onClick={() => setTab('accounts')}
+                      className="cursor-default text-ink-accent underline underline-offset-2"
+                    >
+                      Accounts
+                    </button>
+                    .
                   </>
                 }
               >
@@ -380,9 +400,10 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                     onClick={async () => {
                       setCalendarStatus('Checking…')
                       try {
-                        const events = await window.oats.getCalendarEvents()
-                        useStore.getState().setEvents(events)
-                        setCalendarStatus(`Connected — ${events.length} events in the next week.`)
+                        const { events, errors } = await window.oats.getCalendarEvents()
+                        useStore.getState().setEvents(events, errors)
+                        const feedError = errors.find((e) => e.startsWith('Calendar feed: '))
+                        setCalendarStatus(feedError ?? `Connected — ${events.length} events in the next week.`)
                       } catch (err) {
                         setCalendarStatus(err instanceof Error ? err.message : String(err))
                       }

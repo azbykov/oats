@@ -17,6 +17,10 @@ files:
   - "!**/node_modules/@fugood/node-whisper-*-cuda/**"
   - "!**/node_modules/@fugood/node-whisper-wasm/**"
 # Native addons and the DLLs/dylibs next to them must be real files on disk.
+# oats:// links open the app; the browser tab that finishes a sign-in uses one.
+protocols:
+  - name: Oats
+    schemes: [oats]
 asarUnpack:
   - "**/node_modules/sherpa-onnx-*/**"
   - "**/node_modules/@fugood/node-whisper-*/**"

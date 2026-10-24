@@ -35,7 +35,10 @@ function EventRow({ event }: { event: CalendarEvent }) {
       onClick={open}
       className="group flex cursor-default items-center gap-3 rounded-lg py-1.5 pr-1.5 pl-2 hover:bg-fill-soft"
     >
-      <span className={`h-8 w-[3px] shrink-0 rounded-full ${live ? 'bg-oats-grass' : 'bg-event-blue'}`} />
+      <span
+        className={`h-8 w-[3px] shrink-0 rounded-full ${live ? 'bg-oats-grass' : 'bg-event-blue'}`}
+        style={!live && event.color ? { background: event.color } : undefined}
+      />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] text-ink-primary">{event.title}</div>
         <div className="text-[12px] text-ink-tertiary tabular-nums">
@@ -72,8 +75,8 @@ function EventRow({ event }: { event: CalendarEvent }) {
 
 function ComingUp() {
   const events = useStore((s) => s.events)
-  const error = useStore((s) => s.eventsError)
-  const hasCalendar = useStore((s) => !!s.data!.settings.icsUrl)
+  const errors = useStore((s) => s.eventsErrors)
+  const hasCalendar = useStore((s) => !!s.data!.settings.icsUrl || s.accounts.length > 0)
   const navigate = useStore((s) => s.navigate)
 
   const upcoming = events.filter((e) => new Date(e.end).getTime() > Date.now())
@@ -97,13 +100,18 @@ function ComingUp() {
               <div className="text-[14px] font-medium text-ink-primary">Connect your calendar</div>
               <div className="text-[12px] text-ink-tertiary">See upcoming meetings and start notes in one click.</div>
             </div>
-            <Button variant="outline" onClick={() => navigate({ view: 'settings', tab: 'calendar' })}>
+            <Button variant="outline" onClick={() => navigate({ view: 'settings', tab: 'accounts' })}>
               Connect
             </Button>
           </div>
         )}
-        {hasCalendar && error && <p className="p-2 text-[13px] text-ink-danger">{error}</p>}
-        {hasCalendar && !error && days.length === 0 && (
+        {hasCalendar &&
+          errors.map((error) => (
+            <p key={error} className="px-2 py-1 text-[13px] text-ink-danger">
+              {error}
+            </p>
+          ))}
+        {hasCalendar && !errors.length && days.length === 0 && (
           <p className="p-2 text-[13px] text-ink-tertiary">No upcoming meetings this week.</p>
         )}
         {days.map(([key, list], i) => (

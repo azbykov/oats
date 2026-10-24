@@ -4,8 +4,7 @@ import { join } from 'node:path'
 import { BUILT_IN_RECIPES, BUILT_IN_TEMPLATES, DEFAULT_SETTINGS } from '../shared/defaults'
 import type { AppData } from '../shared/types'
 
-// Granola keeps its local cache in an encrypted SQLite file; a JSON file is
-// enough for a single-user clone and avoids native module rebuilds.
+// A JSON file is enough for a single-user app and avoids native module rebuilds.
 const dir = () => app.getPath('userData')
 const file = () => join(dir(), 'oats-data.json')
 

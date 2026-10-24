@@ -2,8 +2,8 @@ import { BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
 import type { MeetingApp, PillAction, PillState } from '../shared/types'
 
-// "Meeting detected — Take notes" card that floats over every app, like Granola's
-// active-listening notification and Notion's meeting_notification_pill: a small
+// "Meeting detected — Take notes" card that floats over every app, like Notion's
+// meeting_notification_pill: a small
 // transparent, non-activating panel in the top-right corner of the screen the
 // pointer is on. Transparent parts let clicks through to the windows below.
 

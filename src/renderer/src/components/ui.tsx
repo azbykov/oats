@@ -131,7 +131,7 @@ export function MenuLabel({ children }: { children: ReactNode }) {
   return <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-ink-tertiary uppercase">{children}</div>
 }
 
-/** Dancing bars from Granola's transcription pill (--color-dancing-bars). */
+/** Dancing bars of the transcription pill. */
 export function DancingBars({ active, level = 0.5, className = '' }: { active: boolean; level?: number; className?: string }) {
   const heights = [0.55, 1, 0.75]
   return (
@@ -157,7 +157,20 @@ export function Kbd({ children }: { children: ReactNode }) {
   )
 }
 
-export function Avatar({ name, className = '' }: { name: string; className?: string }) {
+export function Avatar({ name, src, className = '' }: { name: string; src?: string; className?: string }) {
+  const [broken, setBroken] = useState(false)
+  if (src && !broken) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        title={name}
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(true)}
+        className={`inline-block size-6 shrink-0 rounded-full object-cover ring-2 ring-surface ${className}`}
+      />
+    )
+  }
   const hue = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0)
   const letters = name
     .split(/[\s@.]+/)

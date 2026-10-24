@@ -1,8 +1,8 @@
-import { Folder, FolderPlus, Home as HomeIcon, LayoutTemplate, Search, Settings, SquarePen } from 'lucide-react'
+import { Folder, FolderPlus, Home as HomeIcon, LayoutTemplate, Search, Settings, SquarePen, UserRound } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { isMac, shortcut } from '../lib/platform'
 import { useStore } from '../lib/store'
-import { DancingBars, IconButton, Kbd } from './ui'
+import { Avatar, DancingBars, IconButton, Kbd } from './ui'
 
 function NavItem({
   icon,
@@ -36,6 +36,8 @@ export function Sidebar() {
   const notes = useStore((s) => s.data!.notes)
   const recording = useStore((s) => s.recording)
   const level = useStore((s) => s.level)
+  const account = useStore((s) => s.accounts[0])
+  const accountCount = useStore((s) => s.accounts.length)
   const { navigate, createNote, createFolder, setSearchOpen } = useStore.getState()
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
@@ -142,9 +144,18 @@ export function Sidebar() {
 
       <div className="px-2 pb-3">
         <NavItem
+          icon={account ? <Avatar name={account.name} src={account.avatarUrl} className="size-5! ring-0!" /> : <UserRound size={15} />}
+          label={account ? account.name : 'Connect account'}
+          active={route.view === 'settings' && route.tab === 'accounts'}
+          onClick={() => navigate({ view: 'settings', tab: 'accounts' })}
+          trailing={
+            accountCount > 1 ? <span className="text-[11px] text-ink-tertiary">+{accountCount - 1}</span> : undefined
+          }
+        />
+        <NavItem
           icon={<Settings size={15} />}
           label="Settings"
-          active={route.view === 'settings'}
+          active={route.view === 'settings' && route.tab !== 'accounts'}
           onClick={() => navigate({ view: 'settings' })}
         />
       </div>

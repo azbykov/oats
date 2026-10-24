@@ -5,4 +5,11 @@ dist
 native/audio/.build
 native/tcc/build
 *.tsbuildinfo
+.env
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
 native/tcc/arch

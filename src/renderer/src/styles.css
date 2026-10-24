@@ -2,7 +2,7 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Palette extracted from Granola's "oats" design tokens (index-*.css). */
+/* The "oats" palette: warm off-white paper, ink greys, olive and lime. */
 @theme {
   --color-oats-neutral-50: #fcfcf8;
   --color-oats-neutral-100: #f7f7f2;
@@ -243,7 +243,7 @@ textarea,
   font-weight: 600;
 }
 
-/* Granola's signature: text the AI added is grey, what you typed stays dark. */
+/* Text the AI added is grey, what you typed stays dark. */
 .prose-oats .ai-text {
   color: var(--ink-secondary);
 }

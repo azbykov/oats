@@ -8,7 +8,7 @@ type Emit = (event: AiStreamEvent) => void
 
 const controllers = new Map<string, AbortController>()
 
-const ENHANCE_SYSTEM = `You are an AI notepad for meetings, like Granola.
+const ENHANCE_SYSTEM = `You are an AI notepad for meetings.
 The user typed rough notes during a meeting while a transcript was captured.
 Your job is to turn their notes into polished meeting notes.
 
@@ -57,7 +57,7 @@ ${templateInstructions(req)}${req.needsTitle ? '\n\nThe meeting has no title yet
   await run(id, settings, ENHANCE_SYSTEM + whoIsMe(settings), [{ role: 'user', content: prompt }], emit)
 }
 
-const CHAT_SYSTEM = `You are the assistant inside an AI meeting notepad, like Granola.
+const CHAT_SYSTEM = `You are the assistant inside an AI meeting notepad.
 Answer questions using the meeting notes and transcripts provided in <meetings>. "Me" in a transcript is the user; other speakers appear as "Them", "Speaker N" or by name.
 Be direct and concise. Use Markdown (short bullets, bold for key facts). If the answer is not in the meetings, say so plainly.`
 

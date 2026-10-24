@@ -1,6 +1,6 @@
-# Oats — клон Granola
+# Oats
 
-AI-блокнот для встреч в духе [Granola](https://granola.ai): пишете короткие заметки во время звонка, приложение
+AI-блокнот для встреч: пишете короткие заметки во время звонка, приложение
 транскрибирует ваш микрофон («Me») и системный звук собеседников («Them») без бота в созвоне, а после встречи
 Claude превращает ваши заметки и транскрипт в аккуратный конспект по шаблону.
 
@@ -23,10 +23,35 @@ npm run build:native
 
 Дальше: **Settings → Transcription** — по умолчанию Whisper на этом Mac: нажмите **Download** у модели
 (large-v3 turbo, 632 МБ; скачивание и оптимизация под ваш Mac — несколько минут, один раз). Либо переключитесь на
-Deepgram и укажите ключ. **Settings → AI** — провайдер (Claude или OpenAI) и его ключ, **Settings → Calendar** — ICS-ссылка (необязательно).
+Deepgram и укажите ключ. **Settings → AI** — провайдер (Claude или OpenAI) и его ключ, **Settings → Accounts** — вход
+через Google или Яндекс для календарей, **Settings → Calendar** — ICS-ссылка (необязательно).
 
 При первой транскрипции macOS спросит доступ к микрофону и к **записи системного звука** (Core Audio Tap,
 macOS 14.2+; на более старых macOS — «Запись экрана и системного звука»).
+
+### Аккаунты Google и Яндекс
+
+Вход открывает страницу согласия в системном браузере, редирект ловится на `http://127.0.0.1:47821/oauth/callback`
+(OAuth для нативных приложений с PKCE). Можно подключить несколько аккаунтов; в «Coming up»
+попадают события из отмеченных календарей вместе с ICS-фидом, повторы одной встречи склеиваются. Токены хранятся
+только в main-процессе, в `oats-accounts.json`, зашифрованные `safeStorage` (Keychain / DPAPI).
+
+OAuth задаётся при сборке: скопируйте `.env.example` в `.env` и выберите один из вариантов.
+
+**Через сайт Oats** (репозиторий `oats-site`, Cloudflare Worker) — `MAIN_VITE_AUTH_URL=https://<сайт>`. OAuth-клиенты
+и их секреты живут на сайте: он открывает страницу согласия, служит Redirect URI (`https://<сайт>/auth/callback`),
+пересылает ответ на локальный порт приложения и добавляет секрет к обмену кода и обновлению токенов. В приложении
+нет ни client ID, ни секретов; Google-клиент — типа **Web application**. Настройка — в README сайта.
+
+**Напрямую** — свои клиенты в приложении:
+
+- **Google**: [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → включите Google Calendar
+  API → OAuth consent screen (scope `calendar.readonly`; пока приложение в режиме Testing — добавьте себя в Test
+  users) → Credentials → OAuth client ID, тип **Desktop app** → `MAIN_VITE_GOOGLE_CLIENT_ID` и
+  `MAIN_VITE_GOOGLE_CLIENT_SECRET` (для Desktop-клиентов секрет не считается секретным).
+- **Яндекс**: [oauth.yandex.ru](https://oauth.yandex.ru/client/new) → платформа «Веб-сервисы», Redirect URI
+  `http://127.0.0.1:47821/oauth/callback`; доступы: Яндекс ID — почта, имя и портрет; Календарь — чтение (CalDAV)
+  → `MAIN_VITE_YANDEX_CLIENT_ID`. Календарь читается по CalDAV (`caldav.yandex.ru`) с OAuth-токеном.
 
 ### Windows
 
@@ -110,22 +135,23 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 
 ## Что есть
 
-| Granola | Клон |
+| Функция | Как сделано |
 | --- | --- |
-| Coming up (календарь) | ICS-фид: повторы (RRULE), EXDATE, TZID; кнопки Join / Take notes |
+| Coming up (календарь) | Аккаунты Google (Calendar API) и Яндекс (CalDAV) через OAuth + ICS-фид: повторы (RRULE), EXDATE, TZID; кнопки Join / Take notes |
 | Заметки + live-транскрипт Me/Them | Два потока (микрофон + loopback системного звука): локальный Whisper (WhisperKit) или Deepgram nova-3 |
 | Generate / Enhance notes | Claude или OpenAI на выбор (стриминг), текст ИИ серым, ваши формулировки — тёмным |
-| `granola-diarizer` (FluidAudio) | Свой `oats-audio diarize` на FluidAudio: «Speaker 1/2…» после паузы/остановки, переименование, узнавание голоса между сессиями |
+| Разделение собеседников | `oats-audio diarize` на FluidAudio: «Speaker 1/2…» после паузы/остановки, переименование, узнавание голоса между сессиями |
 | Шаблоны (1:1, Stand-up, Discovery…) | Встроенные + свои, перегенерация любым шаблоном |
-| Обнаружение встречи (Notion: MicrophoneUsageMonitor) | `oats-audio watch-mic`: Zoom/Teams/FaceTime/Slack/браузер занял микрофон → баннер и уведомление «Take notes» |
-| Резервная копия звука (Notion: meeting-notes failover) | Каждый канал пишется в WAV до обработки; при обрыве транскрипции или падении — пересборка транскрипта локальным Whisper |
+| Обнаружение встречи | `oats-audio watch-mic`: Zoom/Teams/FaceTime/Slack/браузер занял микрофон → баннер и уведомление «Take notes» |
+| Резервная копия звука | Каждый канал пишется в WAV до обработки; при обрыве транскрипции или падении — пересборка транскрипта локальным Whisper |
 | Ask anything + рецепты `/` | Чат по заметке или по всем заметкам, рецепты через `/` |
 | Папки, поиск ⌘K, тёмная тема | Есть; экспорт в Markdown, копирование |
 
 ## Как устроено
 
 - `src/main` — Electron main: окно, JSON-хранилище (`~/Library/Application Support/Oats/oats-data.json`),
-  вызовы Claude / OpenAI (`ai.ts`), парсер ICS (`ics.ts`), обработчик системного звука.
+  вызовы Claude / OpenAI (`ai.ts`), парсер ICS (`ics.ts`), обработчик системного звука; вход через Google / Яндекс
+  (`oauth.ts`, `accounts.ts`) и их календари (`google.ts`, `yandex.ts`, сводит всё `calendar.ts`).
 - `src/preload` — мост `window.oats`.
 - `src/sidecar` — тот же CLI `oats-audio` на Node (Windows, Intel Mac): `listen` / `transcribe` / `prepare-asr` на
   whisper.cpp ([`@fugood/whisper.node`](https://github.com/mybigday/whisper.node), MIT; ggml-модели в
@@ -139,7 +165,7 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
     раз в секунду идёт частичная расшифровка, после паузы ~0.7 с — финальная, с таймкодами слов. Модели — в
     `~/Library/Application Support/Oats/models` (`prepare-asr` скачивает и компилирует их).
   - `diarize` / `embed` — разделение собеседников на [FluidAudio](https://github.com/FluidInference/FluidAudio)
-    (Apache-2.0, pyannote/WeSpeaker в CoreML); интерфейс повторяет `granola-diarizer`. Модели (~22 МБ) — в
+    (Apache-2.0, pyannote/WeSpeaker в CoreML). Модели (~22 МБ) — в
     `~/Library/Application Support/FluidAudio`. Системный звук пишется во временный WAV 16 кГц, который удаляется
     сразу после диаризации; строки транскрипта режутся по смене говорящего по таймкодам слов.
   - `transcribe` — пакетная расшифровка записанного WAV (восстановление после сбоя); `watch-mic` — какие приложения
@@ -147,16 +173,14 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 - Захват звука (как в Notion): системный звук — Chromium-фича `MacCatapLoopbackAudioForScreenShare` (Core Audio Tap),
   аудио-only `getDisplayMedia` без захвата экрана; микрофон — сырой, с `echoCancellation: "all"`, который вычитает всё,
   что играет Mac, поэтому собеседники из динамиков не попадают в «Me».
-- `src/renderer` — React 19 + TipTap + Tailwind 4; палитра «oats» взята из дизайн-токенов Granola.
+- `src/renderer` — React 19 + TipTap + Tailwind 4, палитра «oats».
 
-Структура данных и UX восстановлены статическим анализом установленного `Granola.app` (v7.668.2) через REA:
-`app.asar` (Electron + React/TipTap), preload-API, CSS-токены, тексты интерфейса. Серверная часть Granola
-(шаблоны, промпты, синхронизация) в приложении не поставляется — здесь она заменена прямыми вызовами Claude и Deepgram.
-Проприетарные шрифты и ассеты Granola не копировались.
+Своего облака нет: шаблоны и промпты встроены в приложение, ИИ и транскрипция — прямые вызовы Claude / OpenAI и
+Deepgram с ключами пользователя.
 
 ## Ограничения
 
-- Нет облака, шаринга, интеграций (Slack, Notion, CRM) и OAuth-календарей. Запись при обнаружении звонка не стартует
+- Нет облака, шаринга и интеграций (Slack, Notion, CRM). Запись при обнаружении звонка не стартует
   сама — только по кнопке «Take notes».
 - Разделяются только собеседники из системного звука; люди рядом с вами в одной комнате попадают в «Me».
 - Сайдкар не упаковывается в сборку автоматически: в продакшне положите его в `Resources/oats-audio`
@@ -164,5 +188,5 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 - Локальный Whisper даёт текст с задержкой ~1–2 с (Deepgram — почти мгновенно) и заметно грузит Mac на длинных звонках.
 - `OATS_USER_DATA=/путь npm run dev` — запуск с отдельной папкой данных.
 - Windows: системный звук берётся только с устройства вывода по умолчанию. Если звонок играет в гарнитуру, которая
-  не выбрана по умолчанию, собеседников не будет слышно — Granola для Teams специально следует за устройством
-  звонка, здесь этого пока нет. Обнаружение звонков опрашивает реестр раз в 1,5 с.
+  не выбрана по умолчанию, собеседников не будет слышно: следовать за устройством звонка (как нужно для Teams)
+  приложение пока не умеет. Обнаружение звонков опрашивает реестр раз в 1,5 с.

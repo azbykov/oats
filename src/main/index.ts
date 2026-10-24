@@ -10,8 +10,9 @@ import {
   shell
 } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import type {
+  AccountProvider,
   AiStreamEvent,
   AppData,
   ChatRequest,
@@ -23,10 +24,19 @@ import type {
   RecordingMeta,
   Theme
 } from '../shared/types'
+import {
+  configuredProviders,
+  connectAccount,
+  disconnectAccount,
+  listAccounts,
+  setAppPassword,
+  setCalendarEnabled
+} from './accounts'
 import { abort, chat, enhance, listOpenAIModels } from './ai'
 import * as asr from './asr'
-import { fetchEvents } from './ics'
+import { fetchCalendar } from './calendar'
 import { activeMeetingApps, setMeetingDetection, type MeetingHandlers } from './meetings'
+import { cancelAuthorization } from './oauth'
 import { openPermissionSettings, permissionStatus, requestPermission } from './permissions'
 import { closeMeetingPill, initMeetingPill, showMeetingPill } from './pill'
 import * as recordings from './recordings'
@@ -35,6 +45,18 @@ import { flushData, loadData, saveData } from './store'
 
 // Lets a second copy (or a test run) keep its data separate.
 if (process.env.OATS_USER_DATA) app.setPath('userData', process.env.OATS_USER_DATA)
+
+// oats:// links bring Oats to the front; the browser tab that finishes a sign-in
+// opens one (oauth.ts). An unpackaged run (npm run dev) registers Electron with
+// the app's path as its argument.
+if (process.defaultApp) {
+  if (process.argv[1]) app.setAsDefaultProtocolClient('oats', process.execPath, [resolve(process.argv[1])])
+} else {
+  app.setAsDefaultProtocolClient('oats')
+}
+// On Windows a link starts a second copy, which hands over to this one and quits.
+// The lock lives in userData, so OATS_USER_DATA copies still run side by side.
+if (!app.requestSingleInstanceLock()) app.quit()
 
 let win: BrowserWindow | null = null
 let data: AppData = loadData()
@@ -229,7 +251,17 @@ function setupIpc() {
   // Settings → "Preview" shows the card without waiting for a real call.
   ipcMain.on('meeting:preview', () => showMeetingPill({ bundleId: 'preview', name: 'Zoom', browser: false }))
 
-  ipcMain.handle('calendar:events', () => fetchEvents(data.settings.icsUrl))
+  ipcMain.handle('calendar:events', () => fetchCalendar(data.settings.icsUrl))
+
+  ipcMain.handle('accounts:list', () => listAccounts())
+  ipcMain.handle('accounts:providers', () => configuredProviders())
+  ipcMain.handle('accounts:connect', (_e, provider: AccountProvider) => connectAccount(provider))
+  ipcMain.on('accounts:cancel', () => cancelAuthorization())
+  ipcMain.handle('accounts:disconnect', (_e, id: string) => disconnectAccount(id))
+  ipcMain.handle('accounts:app-password', (_e, id: string, password: string) => setAppPassword(id, password))
+  ipcMain.handle('accounts:set-calendar', (_e, id: string, calendarId: string, enabled: boolean) =>
+    setCalendarEnabled(id, calendarId, enabled)
+  )
 
   ipcMain.handle('media:system-audio-mode', () =>
     process.platform === 'win32' ? 'loopback' : coreAudioTap ? 'tap' : 'screen'
@@ -272,6 +304,14 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+const showMainWindow = () => withMainWindow(() => {})
+app.on('second-instance', showMainWindow)
+app.on('open-url', (e) => {
+  e.preventDefault()
+  // A link that launched Oats is answered by the window opening on ready.
+  if (app.isReady()) showMainWindow()
 })
 
 app.on('before-quit', () => {

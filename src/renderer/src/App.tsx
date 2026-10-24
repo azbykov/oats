@@ -22,23 +22,31 @@ function useTheme() {
   }, [theme])
 }
 
+function useAccounts() {
+  useEffect(() => window.oats.onAccountsChanged(useStore.getState().setAccounts), [])
+}
+
 function useCalendar() {
   const icsUrl = useStore((s) => s.data?.settings.icsUrl)
+  // Refetch when an account or calendar is switched on or off, not on every account change.
+  const sources = useStore((s) =>
+    s.accounts.map((a) => `${a.id}:${a.calendars.filter((c) => c.enabled).map((c) => c.id)}`).join('|')
+  )
   const setEvents = useStore((s) => s.setEvents)
   useEffect(() => {
-    if (!icsUrl) {
+    if (!icsUrl && !sources) {
       setEvents([])
       return
     }
     const refresh = () =>
       window.oats
         .getCalendarEvents()
-        .then((events) => setEvents(events))
-        .catch((err: Error) => setEvents([], err.message))
+        .then(({ events, errors }) => setEvents(events, errors))
+        .catch((err: Error) => setEvents([], [err.message]))
     refresh()
     const timer = window.setInterval(refresh, 5 * 60_000)
     return () => window.clearInterval(timer)
-  }, [icsUrl, setEvents])
+  }, [icsUrl, sources, setEvents])
 }
 
 function useMenuShortcuts() {
@@ -63,6 +71,7 @@ export default function App() {
     load().then(() => recoverLeftovers())
   }, [load])
   useTheme()
+  useAccounts()
   useCalendar()
   useMenuShortcuts()
   useMeetingDetection()
@@ -78,7 +87,7 @@ export default function App() {
         {route.view === 'note' && <NoteView key={route.id} id={route.id} />}
         {route.view === 'folder' && <FolderView key={route.id} id={route.id} />}
         {route.view === 'templates' && <TemplatesView />}
-        {route.view === 'settings' && <SettingsView initialTab={route.tab} />}
+        {route.view === 'settings' && <SettingsView key={route.tab} initialTab={route.tab} />}
       </main>
       <SearchDialog />
     </div>

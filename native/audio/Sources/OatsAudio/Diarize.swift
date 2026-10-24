@@ -3,9 +3,8 @@ import Foundation
 
 // Offline speaker diarization.
 //
-// Mirrors the interface Granola's own `granola-diarizer` exposes to its Electron
-// main process (observed in the shipped bundle), but is built only on the
-// open-source FluidAudio SDK (Apache-2.0) and its pyannote/WeSpeaker CoreML models:
+// Built only on the open-source FluidAudio SDK (Apache-2.0) and its
+// pyannote/WeSpeaker CoreML models:
 //
 //   oats-audio diarize --input a.wav [--max-speakers N] --output out.json
 //     → { modelId, durationMs, segments: [{ speakerId, startMs, endMs }],

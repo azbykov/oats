@@ -4,10 +4,9 @@ import { isMac } from './platform'
 import { processSession } from './postprocess'
 import { uid, useStore } from './store'
 
-// Granola streams two audio sources to its transcription backend (Deepgram /
-// AssemblyAI behind api.granola.ai): the microphone ("Me") and system output
-// ("Them"). The clone does the same either against Deepgram's live API or with
-// Whisper running locally in the native sidecar (channel 0 = mic, 1 = system).
+// Two audio sources are transcribed: the microphone ("Me") and system output
+// ("Them"), either against Deepgram's live API or with Whisper running locally
+// in the native sidecar (channel 0 = mic, 1 = system).
 
 interface Channel {
   speaker: Speaker

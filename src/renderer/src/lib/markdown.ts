@@ -22,8 +22,8 @@ const normalize = (s: string) =>
     .filter((w) => w.length > 2)
 
 /**
- * Granola renders the words you typed in black and the AI's additions in grey.
- * We approximate that by marking each generated block whose wording overlaps
+ * The words you typed render in black and the AI's additions in grey.
+ * We approximate authorship by marking each generated block whose wording overlaps
  * strongly with a line from the user's own notes.
  */
 export function markAuthorship(html: string, userMarkdown: string) {

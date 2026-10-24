@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type {
+  Account,
   AppData,
   CalendarEvent,
   Folder,
@@ -16,7 +17,7 @@ export type Route =
   | { view: 'note'; id: string }
   | { view: 'folder'; id: string }
   | { view: 'templates' }
-  | { view: 'settings'; tab?: 'general' | 'ai' | 'transcription' | 'calendar' }
+  | { view: 'settings'; tab?: 'general' | 'accounts' | 'ai' | 'transcription' | 'calendar' }
 
 export type RecordingStatus = 'idle' | 'starting' | 'recording' | 'paused' | 'error'
 
@@ -25,7 +26,10 @@ interface State {
   route: Route
   history: Route[]
   events: CalendarEvent[]
-  eventsError: string | null
+  /** Calendar sources that failed on the last refresh. */
+  eventsErrors: string[]
+  /** Signed-in Google / Yandex accounts (tokens stay in the main process). */
+  accounts: Account[]
   searchOpen: boolean
   recording: { noteId: string | null; status: RecordingStatus; error?: string; systemAudio: boolean }
   partials: Record<'me' | 'them', string>
@@ -38,7 +42,8 @@ interface State {
   navigate: (route: Route) => void
   back: () => void
   setSearchOpen: (open: boolean) => void
-  setEvents: (events: CalendarEvent[], error?: string | null) => void
+  setEvents: (events: CalendarEvent[], errors?: string[]) => void
+  setAccounts: (accounts: Account[]) => void
 
   createNote: (init?: Partial<Note>) => Note
   createNoteFromEvent: (event: CalendarEvent) => Note
@@ -85,7 +90,8 @@ export const useStore = create<State>((set, get) => {
     route: { view: 'home' },
     history: [],
     events: [],
-    eventsError: null,
+    eventsErrors: [],
+    accounts: [],
     searchOpen: false,
     recording: { noteId: null, status: 'idle', systemAudio: false },
     partials: { me: '', them: '' },
@@ -94,8 +100,8 @@ export const useStore = create<State>((set, get) => {
     meetingApps: [],
 
     load: async () => {
-      const data = await window.oats.loadData()
-      set({ data })
+      const [data, accounts] = await Promise.all([window.oats.loadData(), window.oats.listAccounts()])
+      set({ data, accounts })
     },
     navigate: (route) => set((s) => ({ route, history: [...s.history, s.route].slice(-50) })),
     back: () =>
@@ -105,7 +111,8 @@ export const useStore = create<State>((set, get) => {
         return { route, history }
       }),
     setSearchOpen: (searchOpen) => set({ searchOpen }),
-    setEvents: (events, eventsError = null) => set({ events, eventsError }),
+    setEvents: (events, eventsErrors = []) => set({ events, eventsErrors }),
+    setAccounts: (accounts) => set({ accounts }),
 
     createNote: (init) => {
       const note: Note = {

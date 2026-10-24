@@ -1,8 +1,8 @@
 import type { Attendee, CalendarEvent } from '../shared/types'
 
-// Granola reads calendars through Google/Microsoft OAuth or macOS EventKit.
-// The clone accepts a private ICS feed URL instead (Google Calendar → Settings →
-// "Secret address in iCal format"; Outlook → Publish calendar).
+// Besides signed-in accounts (accounts.ts), Oats accepts a private ICS feed
+// URL (Google Calendar → Settings → "Secret address in iCal format"; Outlook →
+// Publish calendar). Yandex CalDAV responses are parsed here too.
 
 interface Prop {
   name: string
@@ -155,11 +155,7 @@ export function parseIcs(text: string, from: Date, to: Date): CalendarEvent[] {
       })
     const description = unescape(get('DESCRIPTION')?.value ?? '')
     const location = unescape(get('LOCATION')?.value ?? '')
-    const url =
-      get('URL')?.value ||
-      /(https:\/\/[^\s"<>]*(?:zoom\.us|meet\.google\.com|teams\.microsoft\.com)[^\s"<>]*)/.exec(
-        `${location} ${description}`
-      )?.[1]
+    const url = get('URL')?.value || meetingLink(`${location} ${description}`)
 
     const rrule = get('RRULE')?.value
     const exdates = new Set<number>(overrides.get(uid) && !get('RECURRENCE-ID') ? overrides.get(uid) : [])
@@ -177,20 +173,32 @@ export function parseIcs(text: string, from: Date, to: Date): CalendarEvent[] {
         end: e.toISOString(),
         attendees,
         location: location || undefined,
-        url
+        url,
+        ...(/^\d{8}$/.test(dtstart.value) ? { allDay: true } : {})
       })
     }
   }
   return events.sort((a, b) => a.start.localeCompare(b.start))
 }
 
+/** Video call link in free text (location, description). */
+export function meetingLink(text: string) {
+  return /(https:\/\/[^\s"<>]*(?:zoom\.us|meet\.google\.com|teams\.microsoft\.com|telemost\.yandex\.ru)[^\s"<>]*)/.exec(
+    text
+  )?.[1]
+}
+
+/** Today and the next week: what "Coming up" shows. */
+export function eventWindow() {
+  const from = new Date()
+  from.setHours(0, 0, 0, 0)
+  return { from, to: new Date(from.getTime() + 8 * DAY) }
+}
+
 export async function fetchEvents(url: string): Promise<CalendarEvent[]> {
   if (!url) return []
   const res = await fetch(url.replace(/^webcal:/i, 'https:'))
   if (!res.ok) throw new Error(`Calendar feed returned ${res.status}`)
-  const now = new Date()
-  const from = new Date(now)
-  from.setHours(0, 0, 0, 0)
-  const to = new Date(from.getTime() + 8 * DAY)
+  const { from, to } = eventWindow()
   return parseIcs(await res.text(), from, to)
 }

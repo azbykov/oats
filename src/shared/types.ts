@@ -1,5 +1,4 @@
-// Data model loosely mirrors Granola's document shape (title, notes, transcript,
-// generated panels, folder lists) observed in the shipped renderer bundle.
+// Data model: documents (title, notes, transcript, generated panels) and folder lists.
 
 export type Speaker = 'me' | 'them'
 
@@ -147,6 +146,42 @@ export interface CalendarEvent {
   attendees: Attendee[]
   location?: string
   url?: string
+  allDay?: boolean
+  /** Colour of the calendar the event comes from (connected accounts only). */
+  color?: string
+}
+
+/** Events from every calendar source; a failing source is reported without hiding the others. */
+export interface CalendarResult {
+  events: CalendarEvent[]
+  errors: string[]
+}
+
+export type AccountProvider = 'google' | 'yandex'
+
+export interface AccountCalendar {
+  id: string
+  name: string
+  color?: string
+  primary?: boolean
+  enabled: boolean
+  /** The user switched it on or off; otherwise it follows the default (on). */
+  chosen?: boolean
+}
+
+/** A signed-in Google or Yandex account. Its tokens stay in the main process. */
+export interface Account {
+  id: string
+  provider: AccountProvider
+  email: string
+  name: string
+  avatarUrl?: string
+  calendars: AccountCalendar[]
+  connectedAt: string
+  /** Set when the account needs to be signed in again. */
+  error?: string
+  /** Yandex: CalDAV didn't take the OAuth token, so it needs a calendar app password. */
+  needsAppPassword?: boolean
 }
 
 export type Theme = 'system' | 'light' | 'dark'
