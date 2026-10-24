@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Uploads a release's builds to Cloudflare R2 for the landing page's download links.
 #
-#   scripts/publish-r2.sh <tag> <dir with Oats-Setup-<version>.exe and Oats-mac-arm64.zip>
+#   scripts/publish-r2.sh <tag> <dir with Oats-Setup-<version>.exe, Oats-mac-arm64.zip and Oats-mac-x64.zip>
 #
 # Layout in the bucket:
 #   releases/<tag>/<file>       one immutable copy per release
 #   latest/Oats-Setup.exe       what the "Download" buttons point at
 #   latest/Oats-mac-arm64.zip
+#   latest/Oats-mac-x64.zip
 #   latest/version.json         version, date, sizes and SHA-256 for the page to show
 #
 # Needs R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET, and the
@@ -28,7 +29,8 @@ fi
 version=${tag#v}
 exe="$dir/Oats-Setup-$version.exe"
 zip="$dir/Oats-mac-arm64.zip"
-for f in "$exe" "$zip"; do
+zip_x64="$dir/Oats-mac-x64.zip"
+for f in "$exe" "$zip" "$zip_x64"; do
   [[ -f $f ]] || { echo "missing $f (does the tag match package.json's version?)" >&2; exit 1; }
 done
 
@@ -49,8 +51,10 @@ fresh='public, max-age=300'
 
 put "$exe" "releases/$tag/$(basename "$exe")" application/vnd.microsoft.portable-executable "$immutable"
 put "$zip" "releases/$tag/Oats-mac-arm64-$version.zip" application/zip "$immutable"
+put "$zip_x64" "releases/$tag/Oats-mac-x64-$version.zip" application/zip "$immutable"
 put "$exe" latest/Oats-Setup.exe application/vnd.microsoft.portable-executable "$fresh"
 put "$zip" latest/Oats-mac-arm64.zip application/zip "$fresh"
+put "$zip_x64" latest/Oats-mac-x64.zip application/zip "$fresh"
 
 entry() { # entry <file> <release key>
   printf '{"url": "%s", "bytes": %s, "sha256": "%s"}' "$2" "$(wc -c < "$1" | tr -d ' ')" "$(shasum -a 256 "$1" | cut -d' ' -f1)"
@@ -62,7 +66,8 @@ cat > "$manifest" <<EOF
   "tag": "$tag",
   "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "windows": $(entry "$exe" "releases/$tag/$(basename "$exe")"),
-  "macArm64": $(entry "$zip" "releases/$tag/Oats-mac-arm64-$version.zip")
+  "macArm64": $(entry "$zip" "releases/$tag/Oats-mac-arm64-$version.zip"),
+  "macX64": $(entry "$zip_x64" "releases/$tag/Oats-mac-x64-$version.zip")
 }
 EOF
 aws s3 cp "$manifest" "s3://$R2_BUCKET/latest/version.json" --endpoint-url "$endpoint" --only-show-errors \
@@ -73,5 +78,6 @@ echo "Published $tag to $R2_BUCKET:"
 cat <<EOF
   releases/$tag/$(basename "$exe")
   releases/$tag/Oats-mac-arm64-$version.zip
-  latest/Oats-Setup.exe, latest/Oats-mac-arm64.zip, latest/version.json
+  releases/$tag/Oats-mac-x64-$version.zip
+  latest/Oats-Setup.exe, latest/Oats-mac-arm64.zip, latest/Oats-mac-x64.zip, latest/version.json
 EOF

@@ -4,7 +4,7 @@
 #   Oats-mac-arm64 Oats.app for Apple Silicon (Swift sidecar + TCC addon), signed ad hoc
 #   Oats-mac-x64   Oats.app for Intel Macs (Node sidecar + universal TCC addon), signed ad
 #                  hoc, after the same sidecar smoke test as Windows
-# On v* tags both are also uploaded to Cloudflare R2 for the landing page (publish job).
+# On v* tags all three are also uploaded to Cloudflare R2 for the landing page (publish job).
 name: Build
 
 on:
@@ -161,11 +161,11 @@ jobs:
           path: dist/Oats-mac-x64.zip
           if-no-files-found: error
 
-  # Tags only: puts both builds in Cloudflare R2 behind the landing's download links.
+  # Tags only: puts all three builds in Cloudflare R2 behind the landing's download links.
   # Setup (bucket, domain, secrets) is described in README → "Загрузки на Cloudflare R2".
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, macos]
+    needs: [windows, macos, macos-intel]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

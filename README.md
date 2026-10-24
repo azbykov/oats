@@ -101,9 +101,9 @@ npm run dist:mac-x64
 
 ### Загрузки на Cloudflare R2
 
-На тегах `v*` job `publish` в `build.yml` кладёт обе сборки в бакет R2 (`scripts/publish-r2.sh`, S3 API):
-`releases/<тег>/…` — неизменяемая копия каждой версии, `latest/Oats-Setup.exe` и `latest/Oats-mac-arm64.zip` — то, на
-что ссылаются кнопки лендинга, `latest/version.json` — версия, дата, размеры и SHA-256. Исходящий трафик R2
+На тегах `v*` job `publish` в `build.yml` кладёт все три сборки в бакет R2 (`scripts/publish-r2.sh`, S3 API):
+`releases/<тег>/…` — неизменяемая копия каждой версии, `latest/Oats-Setup.exe`, `latest/Oats-mac-arm64.zip` и
+`latest/Oats-mac-x64.zip` — то, на что ссылаются кнопки лендинга, `latest/version.json` — версия, дата, размеры и SHA-256. Исходящий трафик R2
 бесплатный; в Pages файлы такого размера не помещаются (лимит 25 МиБ на файл).
 
 Один раз в Cloudflare:
@@ -129,7 +129,7 @@ git push origin v0.1.0
 
 Файлы отдаёт воркер лендинга (`oats-site`, маршрут `/download/*` с привязкой к бакету), так что свой домен и CORS не
 нужны: `https://oats-site.azbykov.workers.dev/download/latest/Oats-Setup.exe`,
-`…/download/latest/Oats-mac-arm64.zip`, `…/download/latest/version.json`. Браузеры держат `latest/*` в кеше 5 минут,
+`…/download/latest/Oats-mac-arm64.zip`, `…/download/latest/Oats-mac-x64.zip`, `…/download/latest/version.json`. Браузеры держат `latest/*` в кеше 5 минут,
 `releases/*` — навсегда; на `workers.dev` CDN-кеша нет, каждая загрузка — одно чтение из R2. Пока сборки не подписаны, на странице стоит предупредить про
 SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 
