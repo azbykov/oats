@@ -34,6 +34,8 @@ mac:
     - "!**/node_modules/sherpa-onnx-win-*/**"
     - "!**/node_modules/@fugood/node-whisper-win32-*/**"
   category: public.app-category.productivity
+  # Generated from resources/icon.svg by scripts/build-icons.sh.
+  icon: resources/icon.icns
   # Signed ad hoc after packaging (see the dist:mac script); no Developer ID needed locally.
   identity: null
   hardenedRuntime: false
@@ -47,6 +49,7 @@ mac:
     NSMicrophoneUsageDescription: Oats transcribes your side of the conversation.
     NSAudioCaptureUsageDescription: Oats transcribes the other people on your calls from system audio.
 win:
+  icon: resources/icon.ico
   files:
     - out/**
     - package.json

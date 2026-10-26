@@ -1,5 +1,6 @@
 import { Folder, FolderPlus, Home as HomeIcon, LayoutTemplate, Search, Settings, SquarePen, UserRound } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import logo from '../assets/logo.svg'
 import { clock, noteTitle } from '../lib/format'
 import { isMac, shortcut } from '../lib/platform'
 import { useStore } from '../lib/store'
@@ -62,7 +63,11 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-60 shrink-0 flex-col">
-      <div className={`drag flex h-[52px] items-center justify-end px-3 ${isMac ? 'pl-20' : ''}`}>
+      <div className={`drag flex h-[52px] items-center justify-between px-3 ${isMac ? 'pl-[92px]' : ''}`}>
+        <div className="flex items-center gap-2 font-display text-[16px] font-semibold tracking-tight text-ink-strong">
+          <img src={logo} alt="" className="size-5" draggable={false} />
+          Oats
+        </div>
         <IconButton label="New note" onClick={() => navigate({ view: 'note', id: createNote().id })}>
           <SquarePen size={16} />
         </IconButton>

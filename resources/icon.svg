@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- The logo (src/renderer/src/assets/logo.svg) on the 824px macOS icon grid. -->
+  <g transform="translate(100 100) scale(12.875)">
+    <rect width="64" height="64" rx="14.4" fill="#313225"/>
+    <g transform="rotate(-32 32 32)">
+      <ellipse cx="32" cy="32" rx="11" ry="21" fill="#d1e043"/>
+      <path d="M32 15v34" stroke="#313225" stroke-width="2.6" stroke-linecap="round" opacity=".55"/>
+    </g>
+  </g>
+</svg>

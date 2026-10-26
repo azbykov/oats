@@ -78,6 +78,8 @@ if (otherCopy) {
 }
 
 let win: BrowserWindow | null = null
+// Packaged apps take their icon from the bundle / exe; in dev Electron would show its own.
+const devIcon = app.isPackaged ? undefined : join(app.getAppPath(), 'resources/icon.png')
 let data: AppData = loadData()
 data.settings.whisperModel = asr.knownModel(data.settings.whisperModel)
 
@@ -121,6 +123,7 @@ function createWindow() {
     minHeight: 520,
     show: false,
     title: 'Oats',
+    icon: devIcon,
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 } }
       : { titleBarStyle: 'hidden', titleBarOverlay: titleBarOverlay() }),
@@ -309,6 +312,7 @@ function setupIpc() {
 
 app.setName('Oats')
 app.whenReady().then(() => {
+  if (devIcon) app.dock?.setIcon(devIcon)
   setupMedia()
   setupMenu()
   setupIpc()
