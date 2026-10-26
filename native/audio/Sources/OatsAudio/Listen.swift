@@ -71,6 +71,17 @@ func runPrepare(_ f: [String: String]) async throws {
     emit(["type": "ready", "modelFolder": folder.path])
 }
 
+// MARK: prewarm-asr
+
+/// Compiles a downloaded model without touching the network. The compiled cache
+/// doesn't survive a new oats-audio build, so the app runs this after an update.
+func runPrewarm(_ f: [String: String]) async throws {
+    let variant = try requireFlag(f, "model")
+    let base = URL(fileURLWithPath: try requireFlag(f, "models-dir"), isDirectory: true)
+    _ = try await makeWhisper(variant: variant, base: base, prewarm: true)
+    emit(["type": "ready", "model": variant])
+}
+
 // MARK: listen
 
 /// Energy-based voice activity detection over 30 ms frames.

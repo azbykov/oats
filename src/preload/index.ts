@@ -63,6 +63,7 @@ const api = {
   activeMeetingApps: (): Promise<MeetingApp[]> => ipcRenderer.invoke('meeting:active'),
   onMeetingDetected: (cb: (app: MeetingApp) => void) => on('meeting:detected', cb),
   onMeetingEnded: (cb: (app: MeetingApp) => void) => on('meeting:ended', cb),
+  onSystemSuspend: (cb: () => void) => on('system:suspend', cb),
   onMeetingStart: (cb: (start: MeetingStart) => void) => on('meeting:start', cb),
   onMeetingIgnore: (cb: (app: MeetingApp) => void) => on('meeting:ignore', cb),
   previewMeetingCard: () => ipcRenderer.send('meeting:preview'),

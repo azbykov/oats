@@ -31,7 +31,16 @@ interface State {
   /** Signed-in Google / Yandex accounts (tokens stay in the main process). */
   accounts: Account[]
   searchOpen: boolean
-  recording: { noteId: string | null; status: RecordingStatus; error?: string; systemAudio: boolean }
+  recording: {
+    noteId: string | null
+    status: RecordingStatus
+    error?: string
+    systemAudio: boolean
+    /** Local Whisper is loading its model; audio is recorded and transcribed once it's ready. */
+    loadingModel?: boolean
+    /** Why transcription stopped by itself, shown until it is resumed. */
+    autoStopped?: string
+  }
   partials: Record<'me' | 'them', string>
   level: number
   diarizing: Record<string, { status: 'running' | 'error'; message?: string }>

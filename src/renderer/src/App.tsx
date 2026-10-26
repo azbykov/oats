@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { FolderView } from './components/FolderView'
-import { MeetingBanner, useMeetingDetection } from './components/MeetingBanner'
+import { MeetingBanner, useAutoStop, useMeetingDetection } from './components/MeetingBanner'
 import { Home } from './components/Home'
 import { NoteView } from './components/NoteView'
 import { SearchDialog } from './components/SearchDialog'
@@ -75,6 +75,7 @@ export default function App() {
   useCalendar()
   useMenuShortcuts()
   useMeetingDetection()
+  useAutoStop()
 
   if (!loaded) return <div className="drag h-full" />
 

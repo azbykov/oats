@@ -28,10 +28,25 @@ export function TranscribePill({ note, onToggleTranscript }: { note: Note; onTog
   const hasTranscript = note.transcript.length > 0
   const wantsSystemAudio = useStore((s) => s.data!.settings.captureSystemAudio)
   const micOnly = isThis && recording.status === 'recording' && wantsSystemAudio && !recording.systemAudio
+  const loadingModel = isThis && recording.status === 'recording' && recording.loadingModel
+  const autoStopped = isThis && recording.status === 'paused' ? recording.autoStopped : undefined
+  const setRecording = useStore((s) => s.setRecording)
 
   return (
     <div className="relative">
-      {micOnly && (
+      {autoStopped ? (
+        <div className="absolute bottom-full left-0 mb-2 flex w-max max-w-80 items-center gap-1 rounded-full border border-hairline bg-surface-elevated py-1 pr-1 pl-3 text-[12px] text-ink-secondary shadow-md">
+          Transcription stopped: {autoStopped}
+          <IconButton label="Dismiss" size="sm" onClick={() => setRecording({ autoStopped: undefined })}>
+            <X size={12} />
+          </IconButton>
+        </div>
+      ) : loadingModel ? (
+        <div className="absolute bottom-full left-0 mb-2 w-max max-w-80 rounded-2xl border border-hairline bg-surface-elevated px-3 py-1.5 text-[12px] leading-snug text-ink-secondary shadow-md">
+          <span className="shimmer-text">Preparing the Whisper model…</span> Audio is being recorded; the transcript
+          will catch up.
+        </div>
+      ) : micOnly && (
         <div className="absolute bottom-full left-0 mb-2 flex w-max items-center gap-2 rounded-full border border-hairline bg-surface-elevated py-1 pr-1 pl-3 text-[12px] text-ink-secondary shadow-md">
           Only your mic is being transcribed
           <Button
@@ -88,6 +103,7 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
   const partials = useStore((s) => s.partials)
   const recording = useStore((s) => s.recording)
   const live = recording.noteId === note.id && recording.status === 'recording'
+  const loadingModel = live && recording.loadingModel
   const scrollRef = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
 
@@ -120,7 +136,9 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
         <div>
           <div className="text-[13px] font-medium text-ink-primary">Transcript</div>
           <div className="text-[11px] text-ink-tertiary">
-            {live ? (
+            {loadingModel ? (
+              <span className="shimmer-text">Preparing the Whisper model…</span>
+            ) : live ? (
               recording.systemAudio ? (
                 'Listening to your mic and system audio'
               ) : (
@@ -165,7 +183,9 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
       >
         {!note.transcript.length && !partials.me && !partials.them && (
           <p className="px-4 py-10 text-center text-[13px] leading-relaxed text-ink-tertiary">
-            {live
+            {loadingModel
+              ? 'Recording. Whisper is still preparing its model — after an update this can take several minutes on the first run. The transcript catches up once it’s ready.'
+              : live
               ? 'Listening… start talking.'
               : 'Press Transcribe to capture this conversation. Audio is never stored.'}
           </p>

@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
+  powerMonitor,
   session,
   shell
 } from 'electron'
@@ -36,6 +37,7 @@ import { abort, chat, enhance, listOpenAIModels } from './ai'
 import { cliStatus, type CliKind } from './ai-cli'
 import * as asr from './asr'
 import { fetchCalendar } from './calendar'
+import { claimInstance, otherInstance } from './instance'
 import { activeMeetingApps, setMeetingDetection, type MeetingHandlers } from './meetings'
 import { cancelAuthorization } from './oauth'
 import { openPermissionSettings, permissionStatus, requestPermission } from './permissions'
@@ -58,7 +60,22 @@ if (process.defaultApp) {
 }
 // On Windows a link starts a second copy, which hands over to this one and quits.
 // The lock lives in userData, so OATS_USER_DATA copies still run side by side.
-if (!app.requestSingleInstanceLock()) app.quit()
+const locked = app.requestSingleInstanceLock()
+if (!locked) app.quit()
+// The lock can miss a running copy on macOS (instance.ts). Exit before this one saves anything.
+const otherCopy = locked ? otherInstance() : null
+if (otherCopy) {
+  app.whenReady().then(() => {
+    dialog.showMessageBoxSync({
+      type: 'warning',
+      message: 'Oats is already open',
+      detail: `Another copy is running from ${otherCopy}. Quit it first: both copies would write the same notes.`
+    })
+    app.exit(0)
+  })
+} else if (locked) {
+  claimInstance()
+}
 
 let win: BrowserWindow | null = null
 let data: AppData = loadData()
@@ -180,9 +197,8 @@ function onPillAction(app: MeetingApp, action: PillAction) {
 // When Oats is in front, the in-app banner offers notes; otherwise the floating card does.
 const meetingHandlers: MeetingHandlers = {
   isIgnored: (bundleId) => (data.settings.ignoredMeetingApps ?? []).includes(bundleId),
-  onDetected: (app) => {
-    if (!BrowserWindow.getFocusedWindow()) showMeetingPill(app)
-  },
+  // Also while Oats is in front: the window no longer has its own "call detected" banner.
+  onDetected: (app) => showMeetingPill(app),
   onEnded: (app) => closeMeetingPill(app.bundleId)
 }
 
@@ -234,9 +250,10 @@ function setupIpc() {
 
   ipcMain.handle('asr:models', () => asr.listModels())
   ipcMain.on('asr:prepare', (_e, id: string) => asr.prepareModel(id))
-  ipcMain.handle('asr:start', (e, model: string, language: string, words: boolean) =>
-    asr.startListener(model, language, words, e.sender)
-  )
+  ipcMain.handle('asr:start', (e, model: string, language: string, words: boolean) => {
+    recordings.yieldToLive()
+    return asr.startListener(model, language, words, e.sender)
+  })
   ipcMain.on('asr:frame', (_e, kind: number, channel: number, pcm?: ArrayBuffer) => asr.sendFrame(kind, channel, pcm))
 
   ipcMain.handle('native:available', () => audioHelper() !== null)
@@ -304,8 +321,11 @@ app.whenReady().then(() => {
     onAction: onPillAction
   })
   createWindow()
+  if (data.settings.transcriptionProvider === 'whisper') asr.prewarmModel(data.settings.whisperModel)
   setMeetingDetection(data.settings.detectMeetings, meetingHandlers)
   startUpdateChecks()
+  // Audio capture doesn't survive sleep; the renderer stops transcription cleanly first.
+  powerMonitor.on('suspend', () => win?.webContents.send('system:suspend'))
   nativeTheme.on('updated', syncWindowColors)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

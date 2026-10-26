@@ -21,6 +21,8 @@ let channels: Channel[] = []
 let ownedStreams: MediaStream[] = []
 let taps = new Map<MediaStream, PcmTap>()
 let activeLocal = false
+/** Local Whisper is still loading its model; the session's audio is queued meanwhile. */
+let whisperLoading = false
 let whisperSession: { noteId: string; offset: number } | null = null
 let audioCtx: AudioContext | null = null
 let meterFrame = 0
@@ -29,6 +31,15 @@ let baseOffset = 0
 let session: { id: string; noteId: string; offset: number; recorders: ChannelRecorder[]; failed: boolean } | null = null
 
 const CHANNEL: Record<Speaker, number> = { me: 0, them: 1 }
+
+/** When each side was last heard (any recognised speech); auto-stop goes by it. */
+const heard: Record<Speaker, number> = { me: 0, them: 0 }
+const hearNow = () => {
+  heard.me = heard.them = Date.now()
+}
+/** ms since anyone was heard, counted from the start of the session. */
+export const silentFor = (speaker?: Speaker) =>
+  Date.now() - (speaker ? heard[speaker] : Math.max(heard.me, heard.them))
 const speakerOf = (channel: number): Speaker => (channel === 1 ? 'them' : 'me')
 
 // ---- Deepgram ----
@@ -75,6 +86,7 @@ function openChannel(
     const data = JSON.parse(String(msg.data))
     if (data.type !== 'Results') return
     const text: string = data.channel?.alternatives?.[0]?.transcript ?? ''
+    if (text.trim()) heard[speaker] = Date.now()
     if (data.is_final) {
       setPartial(speaker, '')
       if (text.trim()) {
@@ -131,6 +143,7 @@ function subscribeWhisper() {
     const session = whisperSession
     if (!session) return
     const speaker = speakerOf(ev.channel)
+    if (ev.text.trim()) heard[speaker] = Date.now()
     if (ev.type === 'partial') {
       if (taps.size) setPartial(speaker, ev.text)
       return
@@ -149,21 +162,53 @@ function subscribeWhisper() {
   })
 }
 
+/**
+ * Audio is recorded from the start; Whisper gets it once its model is loaded,
+ * which can take many minutes when CoreML compiles it for a new oats-audio build.
+ * Until then the PCM is queued, so the transcript catches up instead of missing
+ * the start of the meeting.
+ */
 async function startWhisper(noteId: string, streams: { speaker: Speaker; stream: MediaStream }[]) {
   const { settings } = useStore.getState().data!
   subscribeWhisper()
   const words = settings.separateSpeakers && !!session?.recorders.some((r) => r.meta.channel === 'them')
-  await window.oats.startWhisper(settings.whisperModel, settings.language, words)
-  whisperSession = { noteId, offset: baseOffset }
+  const queue: [channel: number, pcm: ArrayBuffer][] = []
+  let connected = false
   for (const { speaker, stream } of streams) {
     const tap = tapFor(stream)
     await tap.ready
     const ch = CHANNEL[speaker]
-    window.oats.sendWhisperFrame(2, ch)
-    tap.listen((pcm) => window.oats.sendWhisperFrame(1, ch, pcm.buffer as ArrayBuffer))
+    tap.listen((pcm) => {
+      if (connected) window.oats.sendWhisperFrame(1, ch, pcm.buffer as ArrayBuffer)
+      else queue.push([ch, pcm.buffer as ArrayBuffer])
+    })
   }
   session?.recorders.forEach((r) => r.start())
-  useStore.getState().setRecording({ status: 'recording' })
+  whisperLoading = true
+  useStore.getState().setRecording({ status: 'recording', loadingModel: true })
+
+  const current = session
+  const offset = baseOffset
+  window.oats
+    .startWhisper(settings.whisperModel, settings.language, words)
+    .then(() => {
+      // Paused (or restarted) while the model loaded: the recording is re-transcribed instead.
+      if (session !== current || !whisperLoading) return
+      whisperLoading = false
+      // Loading time isn't silence: the queued audio is about to be heard.
+      hearNow()
+      whisperSession = { noteId, offset }
+      for (const { speaker } of streams) window.oats.sendWhisperFrame(2, CHANNEL[speaker])
+      for (const [ch, pcm] of queue) window.oats.sendWhisperFrame(1, ch, pcm)
+      queue.length = 0
+      connected = true
+      useStore.getState().setRecording({ loadingModel: false })
+    })
+    .catch((err: Error) => {
+      if (session !== current) return
+      stopTranscription()
+      useStore.getState().setRecording({ noteId, status: 'error', error: err.message, loadingModel: false })
+    })
 }
 
 // ---- shared ----
@@ -246,11 +291,12 @@ export async function startTranscription(noteId: string) {
   }
   if (channels.length || taps.size) stopTranscription()
   activeLocal = local
-  setRecording({ noteId, status: 'starting', error: undefined, systemAudio: false })
+  setRecording({ noteId, status: 'starting', error: undefined, systemAudio: false, loadingModel: false, autoStopped: undefined })
 
   const note = data.notes.find((n) => n.id === noteId)
   baseOffset = note?.transcript.at(-1)?.end ?? 0
   sessionStart = Date.now()
+  hearNow()
 
   try {
     // Ask for anything macOS hasn't asked about yet; a denied permission opens System (or Windows) Settings.
@@ -308,6 +354,9 @@ function markFailed() {
 export function stopTranscription() {
   const local = activeLocal
   activeLocal = false
+  // Whisper never heard this session: the local copy is transcribed after it ends.
+  if (whisperLoading) markFailed()
+  whisperLoading = false
   const ended = session
   session = null
   if (local) {
@@ -338,7 +387,15 @@ export function stopTranscription() {
   setLevel(0)
   setPartial('me', '')
   setPartial('them', '')
-  if (recording.status !== 'error') setRecording({ status: recording.noteId ? 'paused' : 'idle' })
+  if (recording.status !== 'error') setRecording({ status: recording.noteId ? 'paused' : 'idle', loadingModel: false })
+}
+
+/** Stops on its own (call ended, long silence, sleep); the note says why until resumed. */
+export function autoStop(reason: string) {
+  const { recording, setRecording } = useStore.getState()
+  if (recording.status !== 'recording' && recording.status !== 'starting') return
+  stopTranscription()
+  setRecording({ autoStopped: reason })
 }
 
 export function elapsedMs() {

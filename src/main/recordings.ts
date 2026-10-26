@@ -79,16 +79,31 @@ const sidecarError = (err: unknown) => {
   return new Error(stderr?.replace(/^oats-audio:\s*/, '') || (err instanceof Error ? err.message : String(err)))
 }
 
-async function withSidecar<T>(id: string, args: (wav: string, out: string) => string[]): Promise<T> {
+/** Shown when live transcription took over; the renderer retries after the recording. */
+export const DEFERRED = 'Deferred until live transcription ends.'
+
+/** Offline transcriptions, stopped when live transcription starts so they don't compete for the Neural Engine. */
+const yielding = new Set<AbortController>()
+
+export function yieldToLive() {
+  for (const c of yielding) c.abort()
+}
+
+async function withSidecar<T>(
+  id: string,
+  args: (wav: string, out: string) => string[],
+  signal?: AbortSignal
+): Promise<T> {
   if (!audioHelper()) throw new Error(NOT_INSTALLED)
   const dataBytes = await seal(id)
   // Less than ~2 s of audio has nothing useful in it.
   if (dataBytes < SAMPLE_RATE * 2 * 2) throw new Error('Not enough audio.')
   const out = `${wavPath(id)}.${Date.now()}.out.json`
   try {
-    await runAudio(args(wavPath(id), out), { timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 })
+    await runAudio(args(wavPath(id), out), { timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024, signal })
     return JSON.parse(await readFile(out, 'utf8')) as T
   } catch (err) {
+    if (signal?.aborted) throw new Error(DEFERRED)
     throw sidecarError(err)
   } finally {
     await rm(out, { force: true })
@@ -107,12 +122,22 @@ export function diarize(id: string, maxSpeakers?: number) {
 export async function transcribe(id: string, preferredModel: string, language: string, words: boolean) {
   const model = readyModel(preferredModel)
   if (!model) throw new Error('Download a Whisper model in Settings → Transcription to recover this recording.')
-  const result = await withSidecar<{ segments: RecoveredSegment[] }>(id, (wav, out) => {
-    const args = ['transcribe', '--input', wav, '--model', model, '--models-dir', whisperModelsDir(), '--language', language, '--output', out]
-    if (words) args.push('--words', '1')
-    return args
-  })
-  return result.segments
+  const controller = new AbortController()
+  yielding.add(controller)
+  try {
+    const result = await withSidecar<{ segments: RecoveredSegment[] }>(
+      id,
+      (wav, out) => {
+        const args = ['transcribe', '--input', wav, '--model', model, '--models-dir', whisperModelsDir(), '--language', language, '--output', out]
+        if (words) args.push('--words', '1')
+        return args
+      },
+      controller.signal
+    )
+    return result.segments
+  } finally {
+    yielding.delete(controller)
+  }
 }
 
 export async function remove(id: string) {

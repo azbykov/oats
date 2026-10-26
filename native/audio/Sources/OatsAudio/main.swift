@@ -3,6 +3,7 @@ import Foundation
 // oats-audio: native audio sidecar for Oats.
 //   diarize / embed   offline speaker separation (FluidAudio)      — Diarize.swift
 //   prepare-asr       download + compile a Whisper model           — Listen.swift
+//   prewarm-asr       compile a downloaded model (after an update) — Listen.swift
 //   listen            streaming local transcription (WhisperKit)   — Listen.swift
 //   transcribe        batch transcription of a recorded WAV        — Transcribe.swift
 //   watch-mic         which apps are recording from the mic        — WatchMic.swift
@@ -16,6 +17,7 @@ let usage = """
       oats-audio diarize --input <wav> [--max-speakers N] [--output <json>] [--models-dir <dir>]
       oats-audio embed --input <wav> [--output <json>] [--models-dir <dir>]
       oats-audio prepare-asr --model <variant> --models-dir <dir>
+      oats-audio prewarm-asr --model <variant> --models-dir <dir>
       oats-audio listen --model <variant> --models-dir <dir> [--language <code>] [--words-channels 1]
       oats-audio transcribe --input <wav> --model <variant> --models-dir <dir> [--language <code>] [--words 1] [--output <json>]
       oats-audio watch-mic
@@ -43,6 +45,7 @@ do {
     switch args.first {
     case "diarize", "embed": try await runDiarization(args)
     case "prepare-asr": try await runPrepare(try flags(args.dropFirst()))
+    case "prewarm-asr": try await runPrewarm(try flags(args.dropFirst()))
     case "listen": try await runListen(try flags(args.dropFirst()))
     case "transcribe": try await runTranscribe(try flags(args.dropFirst()))
     case "watch-mic": try await runWatchMic()

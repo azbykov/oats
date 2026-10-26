@@ -16,8 +16,27 @@ interface Rec {
   channel: Speaker
 }
 
-const IGNORABLE = /no speech|not enough audio/i
+// The Swift helper reports FluidAudio's noSpeechDetected as is.
+const IGNORABLE = /no ?speech|not enough audio/i
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const transcribing = () => ['recording', 'starting'].includes(useStore.getState().recording.status)
+
+/**
+ * Re-transcribes one recording when no meeting is being transcribed: both need the
+ * Whisper model, and the live one comes first. The main process stops a recovery
+ * that is running when transcription starts (recordings.yieldToLive).
+ */
+async function transcribeWhenIdle(id: string, words: boolean) {
+  for (;;) {
+    while (transcribing()) await sleep(5000)
+    try {
+      return await window.oats.transcribeRecording(id, words)
+    } catch (err) {
+      if (!/deferred until live transcription/i.test(err instanceof Error ? err.message : String(err))) throw err
+    }
+  }
+}
 
 function replaceChannel(
   transcript: TranscriptSegment[],
@@ -43,7 +62,7 @@ async function run(noteId: string, recs: Rec[], offset: number, end: number, fai
         const words = r.channel === 'them' && settings().separateSpeakers
         let segments
         try {
-          segments = await window.oats.transcribeRecording(r.id, words)
+          segments = await transcribeWhenIdle(r.id, words)
         } catch (err) {
           if (IGNORABLE.test(err instanceof Error ? err.message : String(err))) continue
           throw err
