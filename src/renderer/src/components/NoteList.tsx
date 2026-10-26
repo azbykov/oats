@@ -6,7 +6,9 @@ import { Avatar, DancingBars } from './ui'
 
 export function NoteRow({ note }: { note: Note }) {
   const folders = useStore((s) => s.data!.folders)
-  const recording = useStore((s) => s.recording.status === 'recording' && s.recording.noteId === note.id)
+  const recording = useStore(
+    (s) => (s.recording.status === 'recording' || s.recording.status === 'starting') && s.recording.noteId === note.id
+  )
   const navigate = useStore((s) => s.navigate)
   const noteFolders = folders.filter((f) => note.folderIds.includes(f.id))
 

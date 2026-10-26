@@ -107,9 +107,15 @@ function ComingUp() {
         )}
         {hasCalendar &&
           errors.map((error) => (
-            <p key={error} className="px-2 py-1 text-[13px] text-ink-danger">
+            <button
+              key={error}
+              type="button"
+              // Feed errors are fixed in the Calendar tab, account ones (sign in again) in Accounts.
+              onClick={() => navigate({ view: 'settings', tab: error.startsWith('Calendar feed:') ? 'calendar' : 'accounts' })}
+              className="block w-full cursor-default rounded-lg px-2 py-1 text-left text-[13px] text-ink-danger hover:bg-fill-soft"
+            >
               {error}
-            </p>
+            </button>
           ))}
         {hasCalendar && !errors.length && days.length === 0 && (
           <p className="p-2 text-[13px] text-ink-tertiary">No upcoming meetings this week.</p>

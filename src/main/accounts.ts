@@ -86,6 +86,11 @@ function find(id: string) {
 
 const REAUTH = 'Access expired — sign in again'
 
+// unauthorized_client: the refresh token belongs to another OAuth client, e.g. the
+// account was connected from a dev build (own client) and is now used by a build
+// that signs in through the Oats site, or the other way round. Both share this file.
+const NEEDS_SIGN_IN = new Set(['invalid_grant', 'unauthorized_client'])
+
 /** A fresh calendar list, keeping the on/off choices the user made. */
 const keepChoices = (fresh: AccountCalendar[], old: AccountCalendar[] = []) =>
   fresh.map((c) => {
@@ -111,7 +116,10 @@ async function accessToken(id: string): Promise<string> {
         return next.accessToken
       })
       .catch((err) => {
-        if (err instanceof OAuthError && err.code === 'invalid_grant') update(id, { error: REAUTH })
+        if (err instanceof OAuthError && err.code && NEEDS_SIGN_IN.has(err.code)) {
+          update(id, { error: REAUTH })
+          throw new Error(REAUTH)
+        }
         throw err
       })
       .finally(() => refreshing.delete(id))

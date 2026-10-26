@@ -6,7 +6,7 @@ import { elapsedMs, startTranscription, stopTranscription } from '../lib/transcr
 import { useStore } from '../lib/store'
 import { Button, DancingBars, IconButton } from './ui'
 
-function useTicker(active: boolean) {
+export function useTicker(active: boolean) {
   const [, setTick] = useState(0)
   useEffect(() => {
     if (!active) return

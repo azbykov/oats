@@ -1,7 +1,10 @@
 import { Folder, FolderPlus, Home as HomeIcon, LayoutTemplate, Search, Settings, SquarePen, UserRound } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { clock, noteTitle } from '../lib/format'
 import { isMac, shortcut } from '../lib/platform'
 import { useStore } from '../lib/store'
+import { elapsedMs } from '../lib/transcription'
+import { useTicker } from './Transcription'
 import { Avatar, DancingBars, IconButton, Kbd } from './ui'
 import { UpdateCard } from './UpdateCard'
 
@@ -43,7 +46,10 @@ export function Sidebar() {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
 
-  const recordingNote = recording.status === 'recording' ? notes.find((n) => n.id === recording.noteId) : null
+  // 'starting' too: loading a local Whisper model can take a while, and the note's pill already counts.
+  const live = recording.status === 'recording' || recording.status === 'starting'
+  const recordingNote = live ? notes.find((n) => n.id === recording.noteId) : null
+  useTicker(!!recordingNote)
 
   const submitFolder = () => {
     if (name.trim()) {
@@ -138,10 +144,14 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => navigate({ view: 'note', id: recordingNote.id })}
-          className="mx-2 mb-2 flex h-10 cursor-default items-center gap-2.5 rounded-xl border border-hairline bg-surface-elevated px-3 text-left text-[13px] shadow-sm"
+          title="Back to the note being transcribed"
+          className={`mx-2 mb-2 flex h-10 cursor-default items-center gap-2.5 rounded-xl border px-3 text-left text-[13px] shadow-sm ${route.view === 'note' && route.id === recordingNote.id ? 'border-hairline bg-surface-elevated' : 'border-oats-grass/40 bg-surface-elevated hover:bg-fill-soft'}`}
         >
           <DancingBars active level={level} />
-          <span className="min-w-0 flex-1 truncate text-ink-primary">{recordingNote.title || 'New note'}</span>
+          <span className="min-w-0 flex-1 truncate text-ink-primary">{noteTitle(recordingNote)}</span>
+          <span className="shrink-0 text-[12px] text-ink-tertiary tabular-nums">
+            {recording.status === 'starting' ? 'Starting…' : clock(elapsedMs())}
+          </span>
         </button>
       )}
 
