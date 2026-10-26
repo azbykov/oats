@@ -34,6 +34,10 @@ env:
 
 jobs:
   windows:
+    # A release commit ("Version x.y.z") is pushed to main next to its v* tag, and the
+    # tag run builds and publishes the same commit, so the branch run is skipped. Same
+    # condition on the other build jobs.
+    if: ${{ !(github.event_name == 'push' && github.ref_type == 'branch' && startsWith(github.event.head_commit.message, 'Version ')) }}
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -75,6 +79,7 @@ jobs:
         run: node scripts/smoke-sidecar.mjs dist/win-unpacked "$env:RUNNER_TEMP\speech.wav"
 
   macos:
+    if: ${{ !(github.event_name == 'push' && github.ref_type == 'branch' && startsWith(github.event.head_commit.message, 'Version ')) }}
     # Apple Silicon with Xcode 26: the pinned swift-collections (via WhisperKit and
     # FluidAudio) needs Swift 6.2 or newer, which Xcode 16 on macos-15 doesn't have.
     runs-on: macos-26
@@ -127,6 +132,7 @@ jobs:
           if-no-files-found: error
 
   macos-intel:
+    if: ${{ !(github.event_name == 'push' && github.ref_type == 'branch' && startsWith(github.event.head_commit.message, 'Version ')) }}
     # A real Intel runner, so the packaged Node sidecar (whisper.cpp / sherpa-onnx) is
     # smoke-tested on the architecture it ships for. No Swift here: Intel Macs don't
     # use the WhisperKit helper, so this job doesn't need Xcode 26.
