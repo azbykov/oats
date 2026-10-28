@@ -1,7 +1,7 @@
 {
   "name": "oats",
   "productName": "Oats",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "AI meeting notepad for macOS and Windows",
   "main": "out/main/index.js",
