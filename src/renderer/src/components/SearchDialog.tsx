@@ -1,9 +1,23 @@
-import { FileText, Folder, Search, SquarePen } from 'lucide-react'
+import { FileText, Folder, Search, Sparkles, SquarePen } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { SemanticHit } from '../../../shared/types'
 import { dayLabel, noteTitle } from '../lib/format'
 import { useStore } from '../lib/store'
 
-type Result = { key: string; icon: ReactNode; title: string; subtitle?: string; run: () => void }
+type Result = {
+  key: string
+  icon: ReactNode
+  title: string
+  subtitle?: string
+  run: () => void
+  /** Shown as a heading above the first result of the group. */
+  group?: string
+}
+
+const RELATED = 5
+// e5 scores everything fairly high: related passages measured ~0.84–0.89, unrelated ~0.74–0.78.
+const RELATED_MIN_SCORE = 0.8
+const RELATED_BELOW_BEST = 0.04
 
 function snippet(text: string, q: string) {
   const i = text.toLowerCase().indexOf(q)
@@ -18,6 +32,42 @@ export function SearchDialog() {
   const data = useStore((s) => s.data!)
   const [q, setQ] = useState('')
   const [index, setIndex] = useState(0)
+  // Notes the full-text index matched for the current query (words of 3+ characters).
+  const [found, setFound] = useState<{ q: string; ids: Set<string> } | null>(null)
+
+  useEffect(() => {
+    const query = q.trim()
+    if (!query.split(/\s+/).some((w) => [...w].length >= 3)) {
+      setFound(null)
+      return
+    }
+    let live = true
+    window.oats.searchNotes(query).then((ids) => live && setFound({ q: query, ids: new Set(ids) }))
+    return () => {
+      live = false
+    }
+  }, [q])
+
+  // Notes about the same thing in other words (or another language), from the local model.
+  const [related, setRelated] = useState<{ q: string; hits: SemanticHit[] } | null>(null)
+  useEffect(() => {
+    const query = q.trim()
+    if ([...query].length < 4) {
+      setRelated(null)
+      return
+    }
+    let live = true
+    const timer = window.setTimeout(() => {
+      window.oats
+        .semanticSearch(query, undefined, 30)
+        .then((hits) => live && setRelated(hits ? { q: query, hits } : null))
+        .catch(() => {})
+    }, 250)
+    return () => {
+      live = false
+      window.clearTimeout(timer)
+    }
+  }, [q])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -40,6 +90,7 @@ export function SearchDialog() {
   const results = useMemo<Result[]>(() => {
     const { navigate, createNote } = useStore.getState()
     const query = q.trim().toLowerCase()
+    const indexed = found && found.q.toLowerCase() === query ? found.ids : null
     const out: Result[] = []
     if (!query) {
       out.push({
@@ -59,18 +110,39 @@ export function SearchDialog() {
       let subtitle: string | undefined = dayLabel(n.createdAt)
       if (query) {
         const inTitle = title.toLowerCase().includes(query)
+        if (indexed && !indexed.has(n.id) && !inTitle) continue
         const hit =
           snippet(n.notesMarkdown, query) ??
           snippet(n.panels.map((p) => p.markdown).join('\n'), query) ??
           snippet(n.transcript.map((s) => s.text).join(' '), query)
-        if (!inTitle && !hit) continue
+        if (!inTitle && !hit && !indexed) continue
         subtitle = hit ?? subtitle
       }
       out.push({ key: n.id, icon: <FileText size={15} />, title, subtitle, run: () => navigate({ view: 'note', id: n.id }) })
       if (out.length > 40) break
     }
+    if (query && related && related.q.toLowerCase() === query) {
+      const shown = new Set(out.map((r) => r.key))
+      const byId = new Map(data.notes.map((n) => [n.id, n]))
+      const floor = Math.max(RELATED_MIN_SCORE, (related.hits[0]?.score ?? 1) - RELATED_BELOW_BEST)
+      let added = 0
+      for (const hit of related.hits) {
+        const n = byId.get(hit.noteId)
+        if (!n || shown.has(n.id) || added >= RELATED || hit.score < floor) continue
+        shown.add(n.id)
+        out.push({
+          key: `related-${n.id}`,
+          icon: <Sparkles size={15} />,
+          title: noteTitle(n),
+          subtitle: hit.text.replace(/\s+/g, ' ').slice(0, 120),
+          run: () => navigate({ view: 'note', id: n.id }),
+          group: added === 0 ? 'Related by meaning' : undefined
+        })
+        added++
+      }
+    }
     return out
-  }, [q, data])
+  }, [q, data, found, related])
 
   if (!open) return null
   const choose = (r?: Result) => {
@@ -111,7 +183,12 @@ export function SearchDialog() {
           />
         </div>
         <div className="min-h-0 overflow-y-auto p-1.5">
-          {results.map((r, i) => (
+          {results.map((r, i) => [
+            r.group && (
+              <div key={`${r.key}-group`} className="px-3 pt-2.5 pb-1 text-[11px] font-medium tracking-wide text-ink-tertiary uppercase">
+                {r.group}
+              </div>
+            ),
             <button
               key={r.key}
               type="button"
@@ -125,7 +202,7 @@ export function SearchDialog() {
                 {r.subtitle && <span className="block truncate text-[12px] text-ink-tertiary">{r.subtitle}</span>}
               </span>
             </button>
-          ))}
+          ])}
           {!results.length && <p className="px-3 py-6 text-center text-[13px] text-ink-tertiary">No results</p>}
         </div>
       </div>

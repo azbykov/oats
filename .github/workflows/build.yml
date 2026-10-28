@@ -1,6 +1,7 @@
 # Builds Oats on real runners and attaches the results to the run:
 #   Oats-Setup     dist/Oats-Setup-<version>.exe, with npm's win32 builds of whisper.cpp
-#                  and sherpa-onnx, after a smoke test of the packaged audio sidecar
+#                  and sherpa-onnx, after a smoke test of the packaged audio sidecar and
+#                  of the embedding runtime (onnxruntime-node + app-local VC++ runtime)
 #   Oats-mac-arm64 Oats.app for Apple Silicon (Swift sidecar + TCC addon), signed ad hoc
 #   Oats-mac-x64   Oats.app for Intel Macs (Node sidecar + universal TCC addon), signed ad
 #                  hoc, after the same sidecar smoke test as Windows
@@ -78,6 +79,10 @@ jobs:
         shell: pwsh
         run: node scripts/smoke-sidecar.mjs dist/win-unpacked "$env:RUNNER_TEMP\speech.wav"
 
+      # Semantic search's ONNX runtime, and the VC++ runtime DLLs it needs shipped beside it.
+      - name: Smoke-test embedding runtime
+        run: node scripts/smoke-embedder.mjs dist/win-unpacked
+
   macos:
     if: ${{ !(github.event_name == 'push' && github.ref_type == 'branch' && startsWith(github.event.head_commit.message, 'Version ')) }}
     # Apple Silicon with Xcode 26: the pinned swift-collections (via WhisperKit and
@@ -119,6 +124,9 @@ jobs:
           # Without a subcommand the sidecar prints its usage and exits 1; anything else means it can't start.
           if "$app/Contents/Resources/oats-audio" 2> usage.txt; then exit 1; fi
           grep -q 'usage:' usage.txt
+
+      - name: Smoke-test embedding runtime
+        run: node scripts/smoke-embedder.mjs dist/mac-arm64/Oats.app
 
       # ditto keeps the framework symlinks and signature that a plain artifact upload would break.
       - name: Zip Oats.app

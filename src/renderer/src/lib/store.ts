@@ -11,6 +11,7 @@ import type {
   Template,
   TranscriptSegment
 } from '../../../shared/types'
+import { changes } from './persist'
 
 export type Route =
   | { view: 'home' }
@@ -31,6 +32,8 @@ interface State {
   /** Signed-in Google / Yandex accounts (tokens stay in the main process). */
   accounts: Account[]
   searchOpen: boolean
+  /** Note view without the sidebar and with the header hidden until hovered. */
+  focusMode: boolean
   recording: {
     noteId: string | null
     status: RecordingStatus
@@ -51,6 +54,7 @@ interface State {
   navigate: (route: Route) => void
   back: () => void
   setSearchOpen: (open: boolean) => void
+  setFocusMode: (on: boolean) => void
   setEvents: (events: CalendarEvent[], errors?: string[]) => void
   setAccounts: (accounts: Account[]) => void
 
@@ -60,6 +64,8 @@ interface State {
   deleteNote: (id: string) => void
   appendTranscript: (id: string, seg: TranscriptSegment) => void
   renameSpeaker: (id: string, speakerId: string, name: string) => void
+  /** Removes a transcript line as shown (consecutive segments merged by mergeTranscript). */
+  deleteTranscriptLine: (id: string, line: TranscriptSegment) => void
   addPanel: (id: string, panel: Panel) => void
   updatePanel: (id: string, panelId: string, patch: Partial<Panel>) => void
   removePanel: (id: string, panelId: string) => void
@@ -89,7 +95,8 @@ export const useStore = create<State>((set, get) => {
     if (!d) return
     const next = fn(d)
     set({ data: next })
-    window.oats.saveData(next)
+    const ops = changes(d, next)
+    if (ops.length) window.oats.applyData(ops)
   }
   const mapNote = (id: string, fn: (n: Note) => Note) =>
     mutate((d) => ({ ...d, notes: d.notes.map((n) => (n.id === id ? fn(n) : n)) }))
@@ -102,6 +109,7 @@ export const useStore = create<State>((set, get) => {
     eventsErrors: [],
     accounts: [],
     searchOpen: false,
+    focusMode: false,
     recording: { noteId: null, status: 'idle', systemAudio: false },
     partials: { me: '', them: '' },
     level: 0,
@@ -120,6 +128,7 @@ export const useStore = create<State>((set, get) => {
         return { route, history }
       }),
     setSearchOpen: (searchOpen) => set({ searchOpen }),
+    setFocusMode: (focusMode) => set({ focusMode }),
     setEvents: (events, eventsErrors = []) => set({ events, eventsErrors }),
     setAccounts: (accounts) => set({ accounts }),
 
@@ -156,6 +165,20 @@ export const useStore = create<State>((set, get) => {
       mapNote(id, (n) => ({
         ...n,
         speakers: n.speakers?.map((s) => (s.id === speakerId ? { ...s, name } : s))
+      })),
+    deleteTranscriptLine: (id, line) =>
+      mapNote(id, (n) => ({
+        ...n,
+        transcript: n.transcript.filter(
+          (s) =>
+            !(
+              s.speaker === line.speaker &&
+              s.speakerId === line.speakerId &&
+              s.start >= line.start &&
+              s.end <= line.end
+            )
+        ),
+        updatedAt: now()
       })),
     addPanel: (id, panel) => mapNote(id, (n) => ({ ...n, panels: [...n.panels, panel], updatedAt: now() })),
     updatePanel: (id, panelId, patch) =>

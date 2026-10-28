@@ -1,6 +1,6 @@
-import { AlertCircle, Copy, Pause, Play, X } from 'lucide-react'
+import { AlertCircle, Copy, Pause, Play, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { Note } from '../../../shared/types'
+import type { Note, TranscriptSegment } from '../../../shared/types'
 import { clock, mergeTranscript, transcriptText } from '../lib/format'
 import { elapsedMs, startTranscription, stopTranscription } from '../lib/transcription'
 import { useStore } from '../lib/store'
@@ -116,8 +116,15 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
   const renameSpeaker = useStore((s) => s.renameSpeaker)
   const lines = mergeTranscript(note.transcript)
 
-  const bubble = (speaker: 'me' | 'them', text: string, key: string, partial?: boolean) => (
-    <div key={key} className={`flex ${speaker === 'me' ? 'justify-end' : 'justify-start'}`}>
+  const deleteLine = useStore((s) => s.deleteTranscriptLine)
+  const [confirming, setConfirming] = useState<string | null>(null)
+
+  const bubble = (speaker: 'me' | 'them', text: string, key: string, partial?: boolean, line?: TranscriptSegment) => (
+    <div
+      key={key}
+      onMouseLeave={() => confirming === key && setConfirming(null)}
+      className={`group flex items-center gap-1 ${speaker === 'me' ? 'flex-row-reverse' : ''}`}
+    >
       <div
         className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-[13px] leading-snug ${
           speaker === 'me'
@@ -127,6 +134,28 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
       >
         {text}
       </div>
+      {line &&
+        (confirming === key ? (
+          <button
+            type="button"
+            onClick={() => {
+              setConfirming(null)
+              deleteLine(note.id, line)
+            }}
+            className="h-6 shrink-0 cursor-default rounded-md px-1.5 text-[11px] font-medium text-ink-danger hover:bg-fill-soft"
+          >
+            Delete
+          </button>
+        ) : (
+          <IconButton
+            label="Delete from transcript"
+            size="sm"
+            className="opacity-0 group-hover:opacity-100"
+            onClick={() => setConfirming(key)}
+          >
+            <Trash2 size={12} />
+          </IconButton>
+        ))}
     </div>
   )
 
@@ -197,7 +226,7 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
           return (
             <div key={s.id}>
               {showName && <SpeakerLabel name={sp.name} onRename={(name) => renameSpeaker(note.id, sp.id, name)} />}
-              {bubble(s.speaker, s.text, s.id)}
+              {bubble(s.speaker, s.text, s.id, false, s)}
             </div>
           )
         })}

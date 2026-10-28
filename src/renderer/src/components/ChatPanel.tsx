@@ -1,38 +1,60 @@
-import { ArrowUp, Square, Sparkles, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { ChatMessage, ChatRequest, Note } from '../../../shared/types'
+import { ArrowUp, FileText, Square, Sparkles, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import type { ChatMessage, ChatScope, Note } from '../../../shared/types'
 import { streamChat } from '../lib/ai'
-import { fullDate, transcriptText } from '../lib/format'
+import { dayLabel, fullDate, noteTitle } from '../lib/format'
 import { markdownToHtml } from '../lib/markdown'
+import { chatContext } from '../lib/retrieval'
 import { useStore } from '../lib/store'
 import { IconButton } from './ui'
 
-function noteContext(n: Note): ChatRequest['context'][number] {
-  const enhanced = n.panels.at(-1)?.markdown
-  return {
-    title: n.title,
-    date: fullDate(n.createdAt),
-    notesMarkdown: enhanced ? `${n.notesMarkdown}\n\n--- Enhanced notes ---\n${enhanced}` : n.notesMarkdown,
-    transcript: transcriptText(n)
-  }
+type Message = ChatMessage & {
+  /** How many meetings the answer was given, out of how many searched. */
+  read?: { count: number; of: number }
 }
 
-const MAX_NOTES_IN_GLOBAL_CHAT = 50
+const CITE = /meeting:\/\/([\w-]+)/g
+const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+
+/** Turns the model's meeting://<ref> links into links that open the note. */
+function answerHtml(markdown: string, notes: Map<string, Note>) {
+  return markdownToHtml(markdown).replace(
+    /<a href="meeting:\/\/([\w-]+)"[^>]*>([\s\S]*?)<\/a>/g,
+    (_, ref: string, text: string) => {
+      const note = notes.get(ref)
+      if (!note) return text
+      const title = escapeAttr(`${noteTitle(note)} · ${dayLabel(note.createdAt)}`)
+      return `<a href="#" class="meeting-cite" data-note-id="${note.id}" title="${title}">${text}</a>`
+    }
+  )
+}
+
+/** The meetings an answer cites, in order of first mention. */
+function citedNotes(markdown: string, notes: Map<string, Note>) {
+  const refs = new Set([...markdown.matchAll(CITE)].map((m) => m[1]))
+  return [...refs].map((r) => notes.get(r)).filter((n): n is Note => !!n)
+}
 
 export function ChatDock({
   scope,
   noteId,
+  folderId,
   leading,
   above
 }: {
-  scope: 'note' | 'all'
+  scope: ChatScope
   noteId?: string
+  folderId?: string
   leading?: ReactNode
   above?: ReactNode
 }) {
   const recipes = useStore((s) => s.data!.recipes)
+  const allNotes = useStore((s) => s.data!.notes)
+  const folderName = useStore((s) => s.data!.folders.find((f) => f.id === folderId)?.name)
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
+  // Each meeting keeps its citation ref for the whole conversation, so earlier answers stay linked.
+  const refs = useRef(new Map<string, string>())
   const [open, setOpen] = useState(false)
   const [streaming, setStreaming] = useState<{ abort: () => void } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -53,23 +75,75 @@ export function ChatDock({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages])
 
-  const send = (text: string) => {
+  const byRef = useMemo(() => {
+    const byId = new Map(allNotes.map((n) => [n.id, n]))
+    const out = new Map<string, Note>()
+    for (const [id, ref] of refs.current) {
+      const note = byId.get(id)
+      if (note) out.set(ref, note)
+    }
+    return out
+    // refs only grow when a message is sent, which also changes `messages`.
+  }, [allNotes, messages])
+
+  const refFor = (id: string) => {
+    let ref = refs.current.get(id)
+    if (!ref) {
+      ref = `m${refs.current.size + 1}`
+      refs.current.set(id, ref)
+    }
+    return ref
+  }
+
+  const send = async (text: string) => {
     if (!text.trim() || streaming) return
-    const data = useStore.getState().data!
-    const notes =
+    const notes = useStore.getState().data!.notes
+    const pool =
       scope === 'note'
-        ? data.notes.filter((n) => n.id === noteId)
-        : [...data.notes].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, MAX_NOTES_IN_GLOBAL_CHAT)
-    const history: ChatMessage[] = [...messages, { role: 'user', content: text.trim() }]
+        ? notes.filter((n) => n.id === noteId)
+        : scope === 'folder'
+          ? notes.filter((n) => n.folderIds.includes(folderId!))
+          : notes
+    const history: Message[] = [...messages, { role: 'user', content: text.trim() }]
+    // Earlier questions steer the search too, for follow-ups like "and what did she say about it?"
+    const question = history
+      .filter((m) => m.role === 'user')
+      .slice(-3)
+      .map((m) => m.content)
+      .join('\n')
     setMessages([...history, { role: 'assistant', content: '' }])
     setInput('')
     setOpen(true)
     setError(null)
+    // Passages found by meaning, when the local model is downloaded (Settings → AI).
+    let cancelled = false
+    setStreaming({
+      abort: () => {
+        cancelled = true
+        setStreaming(null)
+        setMessages((m) => m.slice(0, -1))
+      }
+    })
+    const semantic =
+      scope === 'note' || !pool.length
+        ? null
+        : await window.oats.semanticSearch(question, pool.map((n) => n.id), 60).catch(() => null)
+    if (cancelled) return
+    const context = chatContext(pool, question, refFor, scope === 'note' ? { perMeeting: Infinity } : { semantic })
+    const read = scope === 'note' ? undefined : { count: context.length, of: pool.length }
+    setMessages((m) => [...m.slice(0, -1), { role: 'assistant', content: '', read }])
     const s = streamChat(
-      { messages: history, context: notes.map(noteContext), scope },
+      {
+        messages: history.map(({ role, content }) => ({ role, content })),
+        context,
+        scope,
+        folderName,
+        searched: pool.length,
+        today: fullDate(new Date().toISOString())
+      },
       {
         onDelta: (_d, full) =>
-          setMessages((m) => [...m.slice(0, -1), { role: 'assistant', content: full }])
+          setMessages((m) => [...m.slice(0, -1), { role: 'assistant', content: full, read }])
       }
     )
     setStreaming(s)
@@ -79,6 +153,13 @@ export function ChatDock({
         setMessages((m) => (m.at(-1)?.content ? m : m.slice(0, -1)))
       })
       .finally(() => setStreaming(null))
+  }
+
+  const openCitation = (e: MouseEvent) => {
+    const link = (e.target as HTMLElement).closest<HTMLElement>('[data-note-id]')
+    if (!link) return
+    e.preventDefault()
+    useStore.getState().navigate({ view: 'note', id: link.dataset.noteId! })
   }
 
   const pickRecipe = (i: number) => {
@@ -92,7 +173,12 @@ export function ChatDock({
         <div className="pointer-events-auto mb-3 flex max-h-[55vh] w-full max-w-2xl flex-col rounded-2xl border border-hairline bg-surface-elevated shadow-xl">
           <div className="flex items-center justify-between border-b border-hairline px-4 py-2">
             <span className="flex items-center gap-1.5 text-[12px] font-medium text-ink-tertiary">
-              <Sparkles size={13} /> {scope === 'note' ? 'Chat about this meeting' : 'Chat across all your notes'}
+              <Sparkles size={13} />{' '}
+              {scope === 'note'
+                ? 'Chat about this meeting'
+                : scope === 'folder'
+                  ? `Chat about “${folderName ?? 'this folder'}”`
+                  : 'Chat across all your notes'}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -100,6 +186,7 @@ export function ChatDock({
                 className="cursor-default rounded-md px-2 py-0.5 text-[12px] text-ink-tertiary hover:bg-fill-soft hover:text-ink-primary"
                 onClick={() => {
                   streaming?.abort()
+                  refs.current.clear()
                   setMessages([])
                   setError(null)
                 }}
@@ -111,7 +198,11 @@ export function ChatDock({
               </IconButton>
             </div>
           </div>
-          <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 select-text">
+          <div
+            ref={scrollRef}
+            onClick={openCitation}
+            className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 select-text"
+          >
             {messages.map((m, i) =>
               m.role === 'user' ? (
                 <div key={i} className="flex justify-end">
@@ -119,15 +210,28 @@ export function ChatDock({
                     {m.content}
                   </div>
                 </div>
-              ) : m.content ? (
-                <div
-                  key={i}
-                  className="markdown-chat text-[14px] leading-relaxed text-ink-primary"
-                  dangerouslySetInnerHTML={{ __html: markdownToHtml(m.content) }}
-                />
               ) : (
-                <div key={i} className="shimmer-text text-[14px]">
-                  Thinking…
+                <div key={i}>
+                  {m.read && (
+                    <div className="mb-1.5 text-[12px] text-ink-tertiary">
+                      {m.read.of === 0
+                        ? 'No meetings to search yet'
+                        : m.read.count < m.read.of
+                          ? `Read ${m.read.count} most relevant of ${m.read.of} meetings`
+                          : `Read ${m.read.of} meeting${m.read.of === 1 ? '' : 's'}`}
+                    </div>
+                  )}
+                  {m.content ? (
+                    <div
+                      className="markdown-chat text-[14px] leading-relaxed text-ink-primary"
+                      dangerouslySetInnerHTML={{ __html: answerHtml(m.content, byRef) }}
+                    />
+                  ) : (
+                    <div className="shimmer-text text-[14px]">
+                      {scope !== 'note' && !m.read ? 'Searching your meetings…' : 'Thinking…'}
+                    </div>
+                  )}
+                  {!(streaming && i === messages.length - 1) && <Sources notes={citedNotes(m.content, byRef)} />}
                 </div>
               )
             )}
@@ -218,6 +322,26 @@ export function ChatDock({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function Sources({ notes }: { notes: Note[] }) {
+  if (!notes.length) return null
+  return (
+    <div className="mt-2.5 flex flex-wrap gap-1.5">
+      {notes.map((n) => (
+        <button
+          key={n.id}
+          type="button"
+          data-note-id={n.id}
+          className="inline-flex h-6 max-w-64 cursor-default items-center gap-1.5 rounded-md border border-hairline px-2 text-[12px] text-ink-secondary hover:bg-fill-soft hover:text-ink-primary"
+        >
+          <FileText size={12} className="shrink-0" />
+          <span className="truncate">{noteTitle(n)}</span>
+          <span className="shrink-0 text-ink-tertiary">{dayLabel(n.createdAt)}</span>
+        </button>
+      ))}
     </div>
   )
 }

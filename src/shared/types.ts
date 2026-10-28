@@ -87,6 +87,8 @@ export interface Panel {
   title: string
   markdown: string // raw model output
   html: string // rendered + authorship-marked, editable by the user
+  /** The user changed the generated text, so replacing it would lose their edits. */
+  edited?: boolean
   createdAt: string
 }
 
@@ -252,6 +254,43 @@ export interface ChatMessage {
   content: string
 }
 
+/** Local semantic search: the embedding model and how far indexing has got. */
+export interface SemanticStatus {
+  /** "unavailable": no ONNX runtime for this platform (e.g. Intel Macs). */
+  model: 'unavailable' | 'missing' | 'downloading' | 'ready'
+  progress?: number
+  error?: string
+  /** Notes with up-to-date embeddings, out of all notes. */
+  indexed: number
+  total: number
+}
+
+/** A passage of a note that matches a query by meaning. */
+export interface SemanticHit {
+  noteId: string
+  kind: 'notes' | 'panel' | 'transcript'
+  /** Transcript passages only: where in the meeting it was said. */
+  startMs?: number
+  endMs?: number
+  text: string
+  score: number
+}
+
+/** A note without its transcript and generated panels, which are stored and sent apart. */
+export type NoteRecord = Omit<Note, 'transcript' | 'panels'>
+
+/** One change the renderer saves; it sends these instead of the whole AppData. */
+export type DataOp =
+  | { type: 'note'; note: NoteRecord }
+  | { type: 'note-delete'; id: string }
+  | { type: 'transcript-append'; noteId: string; segments: TranscriptSegment[] }
+  | { type: 'transcript-replace'; noteId: string; segments: TranscriptSegment[] }
+  | { type: 'panels'; noteId: string; panels: Panel[] }
+  | { type: 'folders'; folders: Folder[] }
+  | { type: 'templates'; templates: Template[] }
+  | { type: 'recipes'; recipes: Recipe[] }
+  | { type: 'settings'; settings: Settings }
+
 export interface AppData {
   notes: Note[]
   folders: Folder[]
@@ -275,8 +314,27 @@ export interface EnhanceRequest {
   needsTitle: boolean
 }
 
+export type ChatScope = 'note' | 'folder' | 'all'
+
+/** A meeting handed to the chat; `ref` is what the model cites it by (meeting://<ref>). */
+export interface ChatMeeting {
+  ref: string
+  title: string
+  date: string
+  attendees: string
+  notesMarkdown: string
+  transcript: string
+  /** The transcript was too long and only the passages matching the question are included. */
+  excerpt?: boolean
+}
+
 export interface ChatRequest {
   messages: ChatMessage[]
-  context: { title: string; date: string; notesMarkdown: string; transcript: string }[]
-  scope: 'note' | 'all'
+  context: ChatMeeting[]
+  scope: ChatScope
+  /** Set for scope "folder". */
+  folderName?: string
+  /** How many meetings the search went through (the context holds the most relevant ones). */
+  searched: number
+  today: string
 }

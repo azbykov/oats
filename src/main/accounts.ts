@@ -8,7 +8,7 @@ import { google } from './google'
 import { authorize, isConfigured, OAuthError, refreshTokens, revokeTokens, type Tokens } from './oauth'
 import { CalDavAuthError, yandex } from './yandex'
 
-// Signed-in accounts live apart from oats-data.json, which is handed to the
+// Signed-in accounts live apart from the notes database (oats.db), which is handed to the
 // renderer whole: tokens never leave the main process and are encrypted with
 // the OS keychain (safeStorage: Keychain on macOS, DPAPI on Windows).
 

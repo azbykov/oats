@@ -24,6 +24,7 @@ protocols:
 asarUnpack:
   - "**/node_modules/sherpa-onnx-*/**"
   - "**/node_modules/@fugood/node-whisper-*/**"
+  - "**/node_modules/onnxruntime-node/bin/**"
 mac:
   target: dir
   files:
@@ -33,6 +34,9 @@ mac:
     - "!**/node_modules/@fugood/node-whisper-wasm/**"
     - "!**/node_modules/sherpa-onnx-win-*/**"
     - "!**/node_modules/@fugood/node-whisper-win32-*/**"
+    # Semantic search (onnxruntime-node): macOS arm64 only; the binding loads libonnxruntime.1.dylib.
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}/**"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/darwin/*/libonnxruntime.1.*.*.dylib"
   category: public.app-category.productivity
   # Generated from resources/icon.svg by scripts/build-icons.sh.
   icon: resources/icon.icns
@@ -57,6 +61,7 @@ win:
     - "!**/node_modules/@fugood/node-whisper-wasm/**"
     - "!**/node_modules/sherpa-onnx-darwin-*/**"
     - "!**/node_modules/@fugood/node-whisper-darwin-*/**"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/{linux,darwin,win32/arm64}/**"
   target:
     - target: nsis
       arch: x64

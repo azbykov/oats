@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   desktopCapturer,
   dialog,
   ipcMain,
@@ -15,8 +16,8 @@ import { join, resolve } from 'node:path'
 import type {
   AccountProvider,
   AiStreamEvent,
-  AppData,
   ChatRequest,
+  DataOp,
   EnhanceRequest,
   MeetingApp,
   MeetingStart,
@@ -44,7 +45,16 @@ import { openPermissionSettings, permissionStatus, requestPermission } from './p
 import { closeMeetingPill, initMeetingPill, showMeetingPill } from './pill'
 import * as recordings from './recordings'
 import { audioHelper } from './sidecar'
-import { flushData, loadData, saveData } from './store'
+import { applyOps, closeStore, loadData, searchNotes, state as data, updateSettings } from './store'
+import {
+  downloadSemanticModel,
+  forgetNote,
+  initSemantic,
+  removeSemanticModel,
+  semanticSearch,
+  semanticStatus,
+  touchNotes
+} from './semantic'
 import { installUpdate, startUpdateChecks, updateState } from './updates'
 
 // Lets a second copy (or a test run) keep its data separate.
@@ -80,8 +90,9 @@ if (otherCopy) {
 let win: BrowserWindow | null = null
 // Packaged apps take their icon from the bundle / exe; in dev Electron would show its own.
 const devIcon = app.isPackaged ? undefined : join(app.getAppPath(), 'resources/icon.png')
-let data: AppData = loadData()
-data.settings.whisperModel = asr.knownModel(data.settings.whisperModel)
+loadData()
+if (asr.knownModel(data.settings.whisperModel) !== data.settings.whisperModel)
+  updateSettings({ whisperModel: asr.knownModel(data.settings.whisperModel) })
 
 // Core Audio Tap (macOS 14.2+) captures system audio without screen recording:
 // only the "System Audio Recording" permission is needed and no video is captured.
@@ -192,8 +203,7 @@ function onPillAction(app: MeetingApp, action: PillAction) {
     // The renderer owns the data, so it records the change and saves it back.
     win.webContents.send('meeting:ignore', app)
   } else if (action.type === 'ignore-app') {
-    data.settings.ignoredMeetingApps = [...(data.settings.ignoredMeetingApps ?? []), app.bundleId]
-    saveData(data)
+    updateSettings({ ignoredMeetingApps: [...(data.settings.ignoredMeetingApps ?? []), app.bundleId] })
   }
 }
 
@@ -214,6 +224,7 @@ function setupMenu() {
       submenu: [
         { label: 'New Note', accelerator: 'CmdOrCtrl+N', click: send('menu:new-note') },
         { label: 'Search', accelerator: 'CmdOrCtrl+K', click: send('menu:search') },
+        { label: 'Focus Mode', accelerator: 'CmdOrCtrl+Shift+F', click: send('menu:focus') },
         { type: 'separator' },
         { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: send('menu:settings') },
         { type: 'separator' },
@@ -228,15 +239,34 @@ function setupMenu() {
 }
 
 function setupIpc() {
-  ipcMain.handle('data:load', () => data)
-  ipcMain.on('data:save', (_e, next: AppData) => {
-    const themeChanged = next.settings.theme !== data.settings.theme
-    const detectionChanged = next.settings.detectMeetings !== data.settings.detectMeetings
-    data = next
-    saveData(data)
-    if (themeChanged) applyTheme(data.settings.theme)
-    if (detectionChanged) setMeetingDetection(data.settings.detectMeetings, meetingHandlers)
+  ipcMain.handle('data:load', () => loadData())
+  ipcMain.on('data:apply', (_e, ops: DataOp[]) => {
+    const before = data.settings
+    try {
+      applyOps(ops)
+    } catch (err) {
+      console.error('Failed to save changes', err)
+      return
+    }
+    for (const op of ops) {
+      if (op.type === 'note-delete') forgetNote(op.id)
+      else if (op.type === 'note') touchNotes([op.note.id])
+      else if ('noteId' in op) touchNotes([op.noteId])
+    }
+    if (data.settings.theme !== before.theme) applyTheme(data.settings.theme)
+    if (data.settings.detectMeetings !== before.detectMeetings)
+      setMeetingDetection(data.settings.detectMeetings, meetingHandlers)
   })
+  ipcMain.handle('data:search', (_e, query: string) => searchNotes(query))
+  ipcMain.handle('semantic:status', () => semanticStatus())
+  ipcMain.on('semantic:download', () => downloadSemanticModel())
+  ipcMain.on('semantic:remove', () => removeSemanticModel())
+  ipcMain.handle('semantic:search', (_e, query: string, noteIds?: string[], limit?: number) =>
+    semanticSearch(query, noteIds, limit).catch((err) => {
+      console.error('Semantic search failed', err)
+      return null
+    })
+  )
 
   const emitTo = (sender: Electron.WebContents, id: string) => (ev: AiStreamEvent) => {
     if (!sender.isDestroyed()) sender.send('ai:event', id, ev)
@@ -306,8 +336,9 @@ function setupIpc() {
     await writeFile(filePath, markdown, 'utf8')
     return true
   })
+  ipcMain.handle('clipboard:read-text', () => clipboard.readText())
   ipcMain.on('open-external', (_e, url: string) => {
-    if (/^https?:\/\//.test(url)) shell.openExternal(url)
+    if (/^(https?:\/\/|mailto:)/.test(url)) shell.openExternal(url)
   })
   ipcMain.handle('update:get', () => updateState())
   ipcMain.on('update:install', () => installUpdate())
@@ -330,6 +361,9 @@ app.whenReady().then(() => {
   createWindow()
   if (data.settings.transcriptionProvider === 'whisper') asr.prewarmModel(data.settings.whisperModel)
   setMeetingDetection(data.settings.detectMeetings, meetingHandlers)
+  initSemantic((status) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('semantic:status', status)
+  })
   startUpdateChecks()
   // Audio capture doesn't survive sleep; the renderer stops transcription cleanly first.
   powerMonitor.on('suspend', () => win?.webContents.send('system:suspend'))
@@ -348,7 +382,7 @@ app.on('open-url', (e) => {
 })
 
 app.on('before-quit', () => {
-  flushData()
+  closeStore()
   recordings.closeAll()
   setMeetingDetection(false, meetingHandlers)
   asr.stopListener()

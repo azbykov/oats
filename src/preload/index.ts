@@ -5,6 +5,7 @@ import type {
   AiStreamEvent,
   AsrEvent,
   AppData,
+  DataOp,
   CalendarResult,
   ChatRequest,
   CliStatus,
@@ -19,6 +20,8 @@ import type {
   PillState,
   RecordingMeta,
   RecoveredSegment,
+  SemanticHit,
+  SemanticStatus,
   UpdateState,
   WhisperModel
 } from '../shared/types'
@@ -35,7 +38,17 @@ const on = <A extends any[]>(channel: string, cb: (...args: A) => void) => {
 const api = {
   platform: process.platform,
   loadData: (): Promise<AppData> => ipcRenderer.invoke('data:load'),
-  saveData: (data: AppData) => ipcRenderer.send('data:save', data),
+  /** Saves changes; see DataOp. */
+  applyData: (ops: DataOp[]) => ipcRenderer.send('data:apply', ops),
+  /** Ids of notes containing every word of the query (words under 3 characters are ignored). */
+  searchNotes: (query: string): Promise<string[]> => ipcRenderer.invoke('data:search', query),
+  getSemanticStatus: (): Promise<SemanticStatus> => ipcRenderer.invoke('semantic:status'),
+  onSemanticStatus: (cb: (status: SemanticStatus) => void) => on('semantic:status', cb),
+  downloadSemanticModel: () => ipcRenderer.send('semantic:download'),
+  removeSemanticModel: () => ipcRenderer.send('semantic:remove'),
+  /** Passages closest in meaning to the query, or null when the model isn't downloaded. */
+  semanticSearch: (query: string, noteIds?: string[], limit?: number): Promise<SemanticHit[] | null> =>
+    ipcRenderer.invoke('semantic:search', query, noteIds, limit),
   enhance: (id: string, req: EnhanceRequest) => ipcRenderer.invoke('ai:enhance', id, req),
   chat: (id: string, req: ChatRequest) => ipcRenderer.invoke('ai:chat', id, req),
   abortAi: (id: string) => ipcRenderer.send('ai:abort', id),
@@ -90,10 +103,12 @@ const api = {
   exportMarkdown: (name: string, markdown: string): Promise<boolean> =>
     ipcRenderer.invoke('export:markdown', name, markdown),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
+  /** The page may not read the clipboard itself; plain-text paste goes through here. */
+  readClipboardText: (): Promise<string> => ipcRenderer.invoke('clipboard:read-text'),
   getUpdate: (): Promise<UpdateState | null> => ipcRenderer.invoke('update:get'),
   onUpdate: (cb: (state: UpdateState) => void) => on('update:state', cb),
   installUpdate: () => ipcRenderer.send('update:install'),
-  onMenu: (name: 'new-note' | 'search' | 'settings', cb: () => void) => on(`menu:${name}`, cb)
+  onMenu: (name: 'new-note' | 'search' | 'settings' | 'focus', cb: () => void) => on(`menu:${name}`, cb)
 }
 
 export type OatsApi = typeof api

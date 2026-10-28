@@ -7,6 +7,8 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  Maximize2,
+  Minimize2,
   MoreHorizontal,
   RefreshCw,
   Sparkles,
@@ -20,6 +22,7 @@ import type { Note, Template } from '../../../shared/types'
 import { streamEnhance } from '../lib/ai'
 import { dayLabel, fullDate, noteTitle, timeLabel, transcriptText } from '../lib/format'
 import { htmlToMarkdown, markAuthorship, markdownToHtml } from '../lib/markdown'
+import { isMac } from '../lib/platform'
 import { stopTranscription } from '../lib/transcription'
 import { uid, useNote, useStore } from '../lib/store'
 import { ChatDock } from './ChatPanel'
@@ -201,10 +204,54 @@ function TemplateMenu({
   )
 }
 
+function EditedWarning({
+  action,
+  onConfirm,
+  onKeepBoth,
+  onCancel
+}: {
+  action: 'regenerate' | 'delete'
+  onConfirm: () => void
+  onKeepBoth?: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div
+      className="absolute inset-0 z-40 flex items-center justify-center bg-black/20"
+      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+      onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+    >
+      <div className="w-[380px] rounded-2xl border border-hairline bg-surface-elevated p-5 shadow-xl">
+        <div className="text-[15px] font-medium text-ink-strong">You’ve edited these notes</div>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-ink-secondary">
+          {action === 'regenerate'
+            ? 'Regenerating replaces them, and your changes will be lost. Keep both to get the new version in its own tab.'
+            : 'Deleting them also deletes your changes. This can’t be undone.'}
+        </p>
+        <div className="mt-4 flex justify-end gap-1.5">
+          <Button variant="ghost" onClick={onCancel} autoFocus>
+            Cancel
+          </Button>
+          {onKeepBoth && (
+            <Button variant="outline" onClick={onKeepBoth}>
+              Keep both
+            </Button>
+          )}
+          <Button variant="danger" onClick={onConfirm}>
+            {action === 'regenerate' ? 'Replace' : 'Delete'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function NoteView({ id }: { id: string }) {
   const note = useNote(id)
   const templates = useStore((s) => s.data!.templates)
   const isRecordingThis = useStore((s) => s.recording.noteId === id && s.recording.status === 'recording')
+  const focusMode = useStore((s) => s.focusMode)
+  const setFocusMode = useStore((s) => s.setFocusMode)
   const { updateNote, addPanel, updatePanel, removePanel, deleteNote, navigate, back } = useStore.getState()
 
   const [view, setView] = useState<string>(() => note?.panels.at(-1)?.id ?? 'mine')
@@ -212,6 +259,9 @@ export function NoteView({ id }: { id: string }) {
   const [generating, setGenerating] = useState<{ panelId: string; text: string; abort: () => void } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [warning, setWarning] = useState<
+    { kind: 'regenerate'; template: Template; panelId: string } | { kind: 'delete'; panelId: string } | null
+  >(null)
 
   const onNotesChange = useCallback(
     (html: string) => updateNote(id, { notesHtml: html, notesMarkdown: htmlToMarkdown(html) }),
@@ -231,13 +281,15 @@ export function NoteView({ id }: { id: string }) {
   const panel = note.panels.find((p) => p.id === view)
   const mine = !panel
 
-  const generate = async (template: Template) => {
+  /** Generates notes into a new tab, or in place of the panel `replace` once they're done. */
+  const generate = async (template: Template, replace?: string) => {
     if (generating) return
     if (isRecordingThis) stopTranscription()
     setError(null)
-    const panelId = uid()
+    const panelId = replace ?? uid()
     const current = useStore.getState().data!.notes.find((n) => n.id === id)!
-    addPanel(id, { id: panelId, templateId: template.id, title: template.title, markdown: '', html: '', createdAt: new Date().toISOString() })
+    if (!replace)
+      addPanel(id, { id: panelId, templateId: template.id, title: template.title, markdown: '', html: '', createdAt: new Date().toISOString() })
     setView(panelId)
     const stream = streamEnhance(
       {
@@ -260,14 +312,33 @@ export function NoteView({ id }: { id: string }) {
         md = md.slice(titleMatch[0].length).trim()
       }
       if (!md) throw new Error('Nothing was generated.')
-      updatePanel(id, panelId, { markdown: md, html: markAuthorship(markdownToHtml(md), current.notesMarkdown) })
+      updatePanel(id, panelId, {
+        templateId: template.id,
+        title: template.title,
+        markdown: md,
+        html: markAuthorship(markdownToHtml(md), current.notesMarkdown),
+        edited: false
+      })
     } catch (err) {
-      removePanel(id, panelId)
-      setView('mine')
+      // A replaced panel keeps its old text; only a new, empty tab goes away.
+      if (!replace) {
+        removePanel(id, panelId)
+        setView('mine')
+      }
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setGenerating(null)
     }
+  }
+
+  // Regenerating from a generated tab replaces it, after asking if the user has edited it.
+  const regenerate = (template: Template) => {
+    if (panel?.edited) setWarning({ kind: 'regenerate', template, panelId: panel.id })
+    else generate(template, panel?.id)
+  }
+  const deletePanel = (panelId: string) => {
+    removePanel(note.id, panelId)
+    setView('mine')
   }
 
   const currentMarkdown = () => {
@@ -290,11 +361,19 @@ export function NoteView({ id }: { id: string }) {
 
   return (
     <div className="relative flex h-full flex-col">
-      <header className="drag titlebar-pr flex h-[52px] shrink-0 items-center justify-between px-3">
+      <header
+        className={`drag titlebar-pr flex h-[52px] shrink-0 items-center justify-between px-3 transition-opacity duration-300 ${focusMode ? `opacity-0 hover:opacity-100 focus-within:opacity-100 ${isMac ? 'pl-[84px]' : ''}` : ''}`}
+      >
         <IconButton label="Back" onClick={back}>
           <ChevronLeft size={18} />
         </IconButton>
         <div className="flex items-center gap-1">
+          <IconButton
+            label={focusMode ? 'Exit focus mode (Esc)' : 'Focus mode'}
+            onClick={() => setFocusMode(!focusMode)}
+          >
+            {focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </IconButton>
           <FolderPicker note={note} />
           <Button variant="ghost" size="sm" onClick={copy}>
             {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
@@ -386,8 +465,8 @@ export function NoteView({ id }: { id: string }) {
                         aria-label="Delete generated notes"
                         onClick={(e) => {
                           e.stopPropagation()
-                          removePanel(note.id, p.id)
-                          setView('mine')
+                          if (p.edited) setWarning({ kind: 'delete', panelId: p.id })
+                          else deletePanel(p.id)
                         }}
                         className="-mr-1 rounded p-0.5 text-ink-tertiary opacity-0 group-hover:opacity-100 hover:bg-fill-soft"
                       >
@@ -402,7 +481,7 @@ export function NoteView({ id }: { id: string }) {
                   templates={templates}
                   label="Regenerate"
                   icon={<RefreshCw size={13} />}
-                  onPick={generate}
+                  onPick={regenerate}
                   side="bottom"
                   align="right"
                 />
@@ -423,6 +502,7 @@ export function NoteView({ id }: { id: string }) {
               placeholder="Write notes…"
               onChange={onNotesChange}
               autofocus={!note.notesHtml && !note.title}
+              noteId={note.id}
             />
           )}
           {panel && streamingHtml !== null && (
@@ -436,13 +516,34 @@ export function NoteView({ id }: { id: string }) {
               key={panel.id}
               html={panel.html}
               placeholder="Generated notes"
-              onChange={(html) => updatePanel(note.id, panel.id, { html })}
+              onChange={(html) => updatePanel(note.id, panel.id, { html, edited: true })}
+              noteId={note.id}
             />
           )}
         </div>
       </div>
 
       {showTranscript && <TranscriptDrawer note={note} onClose={() => setShowTranscript(false)} />}
+
+      {warning && (
+        <EditedWarning
+          action={warning.kind}
+          onCancel={() => setWarning(null)}
+          onConfirm={() => {
+            setWarning(null)
+            if (warning.kind === 'regenerate') generate(warning.template, warning.panelId)
+            else deletePanel(warning.panelId)
+          }}
+          onKeepBoth={
+            warning.kind === 'regenerate'
+              ? () => {
+                  setWarning(null)
+                  generate(warning.template)
+                }
+              : undefined
+          }
+        />
+      )}
 
       <ChatDock
         scope="note"

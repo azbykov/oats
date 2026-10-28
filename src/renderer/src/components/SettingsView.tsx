@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { CliStatus, Settings, WhisperModel } from '../../../shared/types'
+import type { CliStatus, SemanticStatus, Settings, WhisperModel } from '../../../shared/types'
 import { isMac, thisComputer } from '../lib/platform'
 import { useStore } from '../lib/store'
 import { AccountsSettings } from './Accounts'
@@ -247,6 +247,12 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                     </Row>
                   </>
                 )}
+                <Row
+                  label="Semantic search"
+                  hint={`Finds meetings by meaning, across Russian and English, for chat and ⌘K. A small model (multilingual-e5-small) runs on ${thisComputer}; notes are indexed a minute after they stop changing, never during a call.`}
+                >
+                  <SemanticSearchModel />
+                </Row>
               </>
             )}
 
@@ -462,6 +468,60 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function SemanticSearchModel() {
+  const [s, setS] = useState<SemanticStatus | null>(null)
+  useEffect(() => {
+    window.oats.getSemanticStatus().then(setS)
+    return window.oats.onSemanticStatus(setS)
+  }, [])
+  if (!s) return null
+  if (s.model === 'unavailable')
+    return <div className="text-[13px] text-ink-tertiary">{s.error ?? `Not available on ${thisComputer}.`}</div>
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-hairline px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium text-ink-primary">
+          multilingual-e5-small <span className="font-normal text-ink-tertiary">· 118 MB</span>
+        </div>
+        {s.model === 'downloading' && (
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-fill-soft">
+              <div
+                className="h-full rounded-full bg-fill-accent transition-[width]"
+                style={{ width: `${Math.round((s.progress ?? 0) * 100)}%` }}
+              />
+            </div>
+            <span className="text-[11px] text-ink-tertiary tabular-nums">{Math.round((s.progress ?? 0) * 100)}%</span>
+          </div>
+        )}
+        {s.model === 'ready' && (
+          <div className="mt-0.5 text-[12px] text-ink-tertiary">
+            {s.indexed < s.total ? `Indexed ${s.indexed} of ${s.total} notes…` : `All ${s.total} notes indexed`}
+          </div>
+        )}
+        {s.error && <div className="mt-1 text-[12px] text-ink-danger">{s.error}</div>}
+      </div>
+      {s.model === 'missing' && (
+        <Button variant="outline" size="sm" onClick={() => window.oats.downloadSemanticModel()}>
+          Download
+        </Button>
+      )}
+      {s.model === 'ready' && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            if (confirm('Remove the model and the search index? Chat and ⌘K go back to word search.'))
+              window.oats.removeSemanticModel()
+          }}
+        >
+          Remove
+        </Button>
+      )}
     </div>
   )
 }

@@ -55,7 +55,11 @@ function useMenuShortcuts() {
     const offs = [
       window.oats.onMenu('new-note', () => navigate({ view: 'note', id: createNote().id })),
       window.oats.onMenu('search', () => setSearchOpen(true)),
-      window.oats.onMenu('settings', () => navigate({ view: 'settings' }))
+      window.oats.onMenu('settings', () => navigate({ view: 'settings' })),
+      window.oats.onMenu('focus', () => {
+        const { focusMode, setFocusMode } = useStore.getState()
+        setFocusMode(!focusMode)
+      })
     ]
     return () => offs.forEach((off) => off())
   }, [])
@@ -65,6 +69,7 @@ export default function App() {
   const loaded = useStore((s) => !!s.data)
   const route = useStore((s) => s.route)
   const load = useStore((s) => s.load)
+  const focus = useStore((s) => s.focusMode && s.route.view === 'note')
 
   useEffect(() => {
     // Recordings left by a crash or quit mid-call are re-transcribed once data is loaded.
@@ -77,12 +82,19 @@ export default function App() {
   useMeetingDetection()
   useAutoStop()
 
+  useEffect(() => {
+    if (!focus) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && useStore.getState().setFocusMode(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focus])
+
   if (!loaded) return <div className="drag h-full" />
 
   return (
     <div className="flex h-full">
-      <Sidebar />
-      <main className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      {!focus && <Sidebar />}
+      <main className={`relative my-2 mr-2 ${focus ? 'ml-2' : ''} flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]`}>
         <MeetingBanner />
         {route.view === 'home' && <Home />}
         {route.view === 'note' && <NoteView key={route.id} id={route.id} />}

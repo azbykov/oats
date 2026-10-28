@@ -5,7 +5,7 @@ import { basename, join } from 'node:path'
 
 // app.requestSingleInstanceLock() on macOS relies on a socket in the temp folder.
 // When that socket is gone, the next copy (npm run dev next to a built app, or a
-// second build) gets the lock too, and both write oats-data.json over each other.
+// second build) gets the lock too, and both write oats.db at once.
 // The running copy also records itself here; a copy that finds another one alive
 // with this data folder stops. Windows' lock is a named pipe and doesn't need this.
 

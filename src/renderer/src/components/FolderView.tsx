@@ -68,7 +68,7 @@ export function FolderView({ id }: { id: string }) {
           <NoteList notes={inFolder} empty="No notes in this folder yet. Add one from a note’s “Add to folder” menu." />
         </div>
       </div>
-      <ChatDock scope="all" />
+      <ChatDock scope="folder" folderId={id} />
     </div>
   )
 }

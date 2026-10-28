@@ -63,20 +63,40 @@ const CHAT_SYSTEM = `You are the assistant inside an AI meeting notepad.
 Answer questions using the meeting notes and transcripts provided in <meetings>. "Me" in a transcript is the user; other speakers appear as "Them", "Speaker N" or by name.
 Be direct and concise. Use Markdown (short bullets, bold for key facts). If the answer is not in the meetings, say so plainly.`
 
+const CITATIONS = `
+Cite your sources: right after a statement that comes from a meeting, add a Markdown link to it whose URL is meeting://<ref> and whose text is a short form of the meeting title, e.g. "Pricing stays at $20 [Weekly sync](meeting://m3)." Use only refs that appear in <meetings>, and cite each meeting where it supports a point rather than all at the end.`
+
+const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+
+function scopeNote(req: ChatRequest) {
+  if (req.scope === 'note') return 'The user is asking about the one meeting below.'
+  const total = `the user's ${req.searched} meeting${req.searched === 1 ? '' : 's'}`
+  const where = req.scope === 'folder' ? `${total} in the folder "${req.folderName ?? ''}"` : `all ${total}`
+  return req.context.length < req.searched
+    ? `A search over ${where} picked the ${req.context.length} most relevant to the conversation, best match first; the rest were not included. If the answer may be in a meeting that is not here, say so.`
+    : `These are ${where}, best match first.`
+}
+
 export async function chat(id: string, settings: Settings, req: ChatRequest, emit: Emit) {
   const meetings = req.context
     .map(
-      (m) => `<meeting title="${m.title || 'Untitled'}" date="${m.date}">
+      (m) => `<meeting ref="${m.ref}" title="${attr(m.title)}" date="${m.date}"${m.attendees ? ` people="${attr(m.attendees)}"` : ''}>
 <notes>
 ${m.notesMarkdown.trim()}
 </notes>
-<transcript>
+<transcript${m.excerpt ? ' excerpt="only the passages matching the question"' : ''}>
 ${m.transcript.trim()}
 </transcript>
 </meeting>`
     )
     .join('\n')
-  const system = `${CHAT_SYSTEM}${whoIsMe(settings)}\n\n<meetings scope="${req.scope}">\n${meetings || '(no meetings yet)'}\n</meetings>`
+  const system = `${CHAT_SYSTEM}${req.scope === 'note' ? '' : CITATIONS}${whoIsMe(settings)}
+Today is ${req.today}
+
+${scopeNote(req)}
+<meetings scope="${req.scope}">
+${meetings || '(no meetings yet)'}
+</meetings>`
   await run(id, settings, system, req.messages, emit)
 }
 
