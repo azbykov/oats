@@ -64,7 +64,10 @@ export function showMeetingPill(app: MeetingApp) {
     }
   })
   pill.setAlwaysOnTop(true, 'screen-saver')
-  pill.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  // Without skipTransformProcessType Electron briefly turns Oats into a UIElement app,
+  // and when the call app has focus it can stay one, losing its Dock icon. The panel
+  // type already lets the card show over full-screen apps.
+  pill.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   // Until the pointer is over the card, clicks pass through to the apps below.
   pill.setIgnoreMouseEvents(true, { forward: true })
   pill.once('ready-to-show', () => pill?.showInactive())

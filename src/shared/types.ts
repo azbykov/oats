@@ -101,6 +101,8 @@ export interface Note {
   notesHtml: string
   notesMarkdown: string
   transcript: TranscriptSegment[]
+  /** How much audio has been recorded into this note (ms); the next session's timeline continues from it. */
+  recordedMs?: number
   speakers?: NoteSpeaker[]
   panels: Panel[]
   folderIds: string[]

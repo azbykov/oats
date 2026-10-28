@@ -47,6 +47,8 @@ const api = {
   onWhisperModels: (cb: (models: WhisperModel[]) => void) => on('asr:models', cb),
   startWhisper: (model: string, language: string, words: boolean): Promise<void> =>
     ipcRenderer.invoke('asr:start', model, language, words),
+  whisperLoaded: (model: string, language: string, words: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('asr:loaded', model, language, words),
   sendWhisperFrame: (kind: 1 | 2 | 3, channel: number, pcm?: ArrayBuffer) =>
     ipcRenderer.send('asr:frame', kind, channel, pcm),
   onWhisperEvent: (cb: (event: AsrEvent) => void) => on('asr:event', cb),

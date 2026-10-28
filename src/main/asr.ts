@@ -150,8 +150,20 @@ let listener: {
   proc: ChildProcessWithoutNullStreams
   key: string
   ready: Promise<void>
+  loaded: boolean
   sender: Electron.WebContents | null
 } | null = null
+
+/** startListener would resolve at once: this model is already loaded and listening. */
+export function listenerLoaded(model: string, language: string, words: boolean) {
+  return (
+    !warming &&
+    !!listener &&
+    listener.loaded &&
+    listener.key === `${model}|${language}|${words}` &&
+    listener.proc.exitCode === null
+  )
+}
 
 /** words: also return word timings for system audio, used to split lines by speaker. */
 export async function startListener(
@@ -179,10 +191,13 @@ export async function startListener(
   if (!proc) return Promise.reject(new Error(NOT_INSTALLED))
   let stderr = ''
   proc.stderr.on('data', (d: Buffer) => (stderr = (stderr + d.toString()).slice(-4000)))
-  const current = { proc, key, sender: sender as Electron.WebContents | null, ready: Promise.resolve() }
+  const current = { proc, key, sender: sender as Electron.WebContents | null, ready: Promise.resolve(), loaded: false }
   current.ready = new Promise<void>((resolve, reject) => {
     jsonLines(proc, (e) => {
-      if (e.type === 'ready') return resolve()
+      if (e.type === 'ready') {
+        current.loaded = true
+        return resolve()
+      }
       const target = current.sender
       if (target && !target.isDestroyed()) target.send('asr:event', e as AsrEvent)
     })

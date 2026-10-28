@@ -185,10 +185,13 @@ async function startWhisper(noteId: string, streams: { speaker: Speaker; stream:
   }
   session?.recorders.forEach((r) => r.start())
   whisperLoading = true
-  useStore.getState().setRecording({ status: 'recording', loadingModel: true })
-
   const current = session
   const offset = baseOffset
+  // Resuming with the listener still running is instant; only a real load gets the notice.
+  const loaded = await window.oats.whisperLoaded(settings.whisperModel, settings.language, words)
+  if (session !== current || !whisperLoading) return
+  useStore.getState().setRecording({ status: 'recording', loadingModel: !loaded })
+
   window.oats
     .startWhisper(settings.whisperModel, settings.language, words)
     .then(() => {
@@ -294,7 +297,9 @@ export async function startTranscription(noteId: string) {
   setRecording({ noteId, status: 'starting', error: undefined, systemAudio: false, loadingModel: false, autoStopped: undefined })
 
   const note = data.notes.find((n) => n.id === noteId)
-  baseOffset = note?.transcript.at(-1)?.end ?? 0
+  // Continue after everything recorded so far, not after the last phrase Whisper
+  // had finished: it can be minutes behind when the session stops.
+  baseOffset = Math.max(note?.recordedMs ?? 0, note?.transcript.at(-1)?.end ?? 0)
   sessionStart = Date.now()
   hearNow()
 
@@ -366,8 +371,10 @@ export function stopTranscription() {
   taps.forEach((t) => t.stop()) // flushes the last chunk to recorders
   taps = new Map()
   if (ended) {
+    const end = elapsedMs()
+    useStore.getState().updateNote(ended.noteId, { recordedMs: end })
     // Local Whisper finalises the last utterance a little later than Deepgram.
-    processSession({ ...ended, end: elapsedMs(), settleMs: local ? 5000 : 2000 })
+    processSession({ ...ended, end, settleMs: local ? 5000 : 2000 })
   }
   for (const c of channels) {
     c.closing = true

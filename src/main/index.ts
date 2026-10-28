@@ -257,6 +257,9 @@ function setupIpc() {
     recordings.yieldToLive()
     return asr.startListener(model, language, words, e.sender)
   })
+  ipcMain.handle('asr:loaded', (_e, model: string, language: string, words: boolean) =>
+    asr.listenerLoaded(model, language, words)
+  )
   ipcMain.on('asr:frame', (_e, kind: number, channel: number, pcm?: ArrayBuffer) => asr.sendFrame(kind, channel, pcm))
 
   ipcMain.handle('native:available', () => audioHelper() !== null)
