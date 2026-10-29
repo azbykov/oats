@@ -204,17 +204,8 @@ function TemplateMenu({
   )
 }
 
-function EditedWarning({
-  action,
-  onConfirm,
-  onKeepBoth,
-  onCancel
-}: {
-  action: 'regenerate' | 'delete'
-  onConfirm: () => void
-  onKeepBoth?: () => void
-  onCancel: () => void
-}) {
+/** Asks before deleting generated notes the user has edited. */
+function EditedWarning({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
     <div
       className="absolute inset-0 z-40 flex items-center justify-center bg-black/20"
@@ -224,21 +215,14 @@ function EditedWarning({
       <div className="w-[380px] rounded-2xl border border-hairline bg-surface-elevated p-5 shadow-xl">
         <div className="text-[15px] font-medium text-ink-strong">You’ve edited these notes</div>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-secondary">
-          {action === 'regenerate'
-            ? 'Regenerating replaces them, and your changes will be lost. Keep both to get the new version in its own tab.'
-            : 'Deleting them also deletes your changes. This can’t be undone.'}
+          Deleting them also deletes your changes. This can’t be undone.
         </p>
         <div className="mt-4 flex justify-end gap-1.5">
           <Button variant="ghost" onClick={onCancel} autoFocus>
             Cancel
           </Button>
-          {onKeepBoth && (
-            <Button variant="outline" onClick={onKeepBoth}>
-              Keep both
-            </Button>
-          )}
           <Button variant="danger" onClick={onConfirm}>
-            {action === 'regenerate' ? 'Replace' : 'Delete'}
+            Delete
           </Button>
         </div>
       </div>
@@ -259,9 +243,8 @@ export function NoteView({ id }: { id: string }) {
   const [generating, setGenerating] = useState<{ panelId: string; text: string; abort: () => void } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [warning, setWarning] = useState<
-    { kind: 'regenerate'; template: Template; panelId: string } | { kind: 'delete'; panelId: string } | null
-  >(null)
+  // A generated tab the user edited, waiting for them to confirm deleting it.
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const onNotesChange = useCallback(
     (html: string) => updateNote(id, { notesHtml: html, notesMarkdown: htmlToMarkdown(html) }),
@@ -281,15 +264,13 @@ export function NoteView({ id }: { id: string }) {
   const panel = note.panels.find((p) => p.id === view)
   const mine = !panel
 
-  /** Generates notes into a new tab, or in place of the panel `replace` once they're done. */
-  const generate = async (template: Template, replace?: string) => {
+  const generate = async (template: Template) => {
     if (generating) return
     if (isRecordingThis) stopTranscription()
     setError(null)
-    const panelId = replace ?? uid()
+    const panelId = uid()
     const current = useStore.getState().data!.notes.find((n) => n.id === id)!
-    if (!replace)
-      addPanel(id, { id: panelId, templateId: template.id, title: template.title, markdown: '', html: '', createdAt: new Date().toISOString() })
+    addPanel(id, { id: panelId, templateId: template.id, title: template.title, markdown: '', html: '', createdAt: new Date().toISOString() })
     setView(panelId)
     const stream = streamEnhance(
       {
@@ -312,30 +293,16 @@ export function NoteView({ id }: { id: string }) {
         md = md.slice(titleMatch[0].length).trim()
       }
       if (!md) throw new Error('Nothing was generated.')
-      updatePanel(id, panelId, {
-        templateId: template.id,
-        title: template.title,
-        markdown: md,
-        html: markAuthorship(markdownToHtml(md), current.notesMarkdown),
-        edited: false
-      })
+      updatePanel(id, panelId, { markdown: md, html: markAuthorship(markdownToHtml(md), current.notesMarkdown) })
     } catch (err) {
-      // A replaced panel keeps its old text; only a new, empty tab goes away.
-      if (!replace) {
-        removePanel(id, panelId)
-        setView('mine')
-      }
+      removePanel(id, panelId)
+      setView('mine')
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setGenerating(null)
     }
   }
 
-  // Regenerating from a generated tab replaces it, after asking if the user has edited it.
-  const regenerate = (template: Template) => {
-    if (panel?.edited) setWarning({ kind: 'regenerate', template, panelId: panel.id })
-    else generate(template, panel?.id)
-  }
   const deletePanel = (panelId: string) => {
     removePanel(note.id, panelId)
     setView('mine')
@@ -465,7 +432,7 @@ export function NoteView({ id }: { id: string }) {
                         aria-label="Delete generated notes"
                         onClick={(e) => {
                           e.stopPropagation()
-                          if (p.edited) setWarning({ kind: 'delete', panelId: p.id })
+                          if (p.edited) setConfirmDelete(p.id)
                           else deletePanel(p.id)
                         }}
                         className="-mr-1 rounded p-0.5 text-ink-tertiary opacity-0 group-hover:opacity-100 hover:bg-fill-soft"
@@ -481,7 +448,7 @@ export function NoteView({ id }: { id: string }) {
                   templates={templates}
                   label="Regenerate"
                   icon={<RefreshCw size={13} />}
-                  onPick={regenerate}
+                  onPick={generate}
                   side="bottom"
                   align="right"
                 />
@@ -525,23 +492,13 @@ export function NoteView({ id }: { id: string }) {
 
       {showTranscript && <TranscriptDrawer note={note} onClose={() => setShowTranscript(false)} />}
 
-      {warning && (
+      {confirmDelete && (
         <EditedWarning
-          action={warning.kind}
-          onCancel={() => setWarning(null)}
+          onCancel={() => setConfirmDelete(null)}
           onConfirm={() => {
-            setWarning(null)
-            if (warning.kind === 'regenerate') generate(warning.template, warning.panelId)
-            else deletePanel(warning.panelId)
+            setConfirmDelete(null)
+            deletePanel(confirmDelete)
           }}
-          onKeepBoth={
-            warning.kind === 'regenerate'
-              ? () => {
-                  setWarning(null)
-                  generate(warning.template)
-                }
-              : undefined
-          }
         />
       )}
 
