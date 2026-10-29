@@ -1,5 +1,5 @@
 import { app, shell } from 'electron'
-import { createHash, randomBytes } from 'node:crypto'
+import { createDecipheriv, createECDH, createHash, hkdfSync, randomBytes } from 'node:crypto'
 import { createServer, type ServerResponse } from 'node:http'
 import type { AccountProvider } from '../shared/types'
 
@@ -9,6 +9,8 @@ import type { AccountProvider } from '../shared/types'
 //   clients and their secrets. It starts the flow, is the registered redirect
 //   URI and relays it to the listener, and adds the secret to token requests.
 // - otherwise the app talks to Google and Yandex directly with its own clients.
+// Notion only works through the site: it has no PKCE, so the site redeems the code
+// itself and hands the tokens back sealed to a key made for this sign-in.
 
 const PORT = Number(import.meta.env.MAIN_VITE_OAUTH_PORT || 47821)
 const LOOPBACK_URI = `http://127.0.0.1:${PORT}/oauth/callback`
@@ -63,8 +65,10 @@ const CONFIG: Record<AccountProvider, ProviderConfig> = {
   }
 }
 
+export type OAuthProvider = AccountProvider | 'notion'
+
 // With the site, whether a provider is set up is the site's business; it answers 503 otherwise.
-export const isConfigured = (provider: AccountProvider) => !!SITE || !!CONFIG[provider].clientId
+export const isConfigured = (provider: OAuthProvider) => !!SITE || (provider !== 'notion' && !!CONFIG[provider].clientId)
 
 const base64url = (buf: Buffer) => buf.toString('base64url')
 
@@ -97,17 +101,17 @@ export function cancelAuthorization() {
   cancelPending?.()
 }
 
-/** Opens the provider's consent page in the browser and resolves with tokens once the user agrees. */
-export async function authorize(provider: AccountProvider): Promise<Tokens> {
-  const cfg = CONFIG[provider]
-  if (!isConfigured(provider)) throw new OAuthError('Sign-in with this provider is not configured in this build')
+/**
+ * The browser part of a sign-in: listens on the loopback port, opens the page `startUrl`
+ * gives for this sign-in's state, and resolves with the redirect's query.
+ */
+async function browserSignIn(startUrl: (state: string) => URL): Promise<{ state: string; query: URLSearchParams }> {
   cancelAuthorization()
   let cancelled = false
   cancelPending = () => (cancelled = true)
   await released
   if (cancelled) throw new OAuthError('Sign-in was cancelled', 'cancelled')
 
-  const verifier = base64url(randomBytes(32))
   // The site reads the listener's port from the state when it relays the redirect.
   const state = `${SITE ? `${PORT}.` : ''}${base64url(randomBytes(16))}`
   /** The page the browser tab ends on: the site's, or one served from here. */
@@ -120,7 +124,7 @@ export async function authorize(provider: AccountProvider): Promise<Tokens> {
     // A tab left from an older sign-in has nothing to go back to.
     res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' }).end(page(title, text, result !== 'expired'))
   }
-  const code = await new Promise<string>((resolve, reject) => {
+  const query = await new Promise<URLSearchParams>((resolve, reject) => {
     const server = createServer((req, res) => {
       // A keep-alive connection from the browser would hold the server open.
       res.shouldKeepAlive = false
@@ -135,14 +139,19 @@ export async function authorize(provider: AccountProvider): Promise<Tokens> {
         return
       }
       const error = url.searchParams.get('error')
-      const code = url.searchParams.get('code')
-      const ok = !error && code
+      const ok = !error && (url.searchParams.has('code') || url.searchParams.has('sealed'))
       reply(res, 200, ok ? 'ok' : error === 'access_denied' ? 'cancelled' : 'error')
       // Back from the browser: Oats comes forward instead of leaving the user on the tab.
       app.focus({ steal: true })
       finish()
-      if (ok) resolve(code)
-      else reject(new OAuthError(error === 'access_denied' ? 'Sign-in was cancelled' : 'Sign-in failed', error ?? undefined))
+      if (ok) resolve(url.searchParams)
+      else
+        reject(
+          new OAuthError(
+            error === 'access_denied' ? 'Sign-in was cancelled' : url.searchParams.get('error_description') || 'Sign-in failed',
+            error ?? undefined
+          )
+        )
     })
     const timer = setTimeout(() => {
       finish()
@@ -174,35 +183,90 @@ export async function authorize(provider: AccountProvider): Promise<Tokens> {
         server.close()
         return
       }
-      const challenge = base64url(createHash('sha256').update(verifier).digest())
-      const url = new URL(SITE ? `${SITE}/auth/${provider}/start` : cfg.authUrl)
-      url.search = new URLSearchParams(
-        SITE
-          ? { state, code_challenge: challenge }
-          : {
-              response_type: 'code',
-              client_id: cfg.clientId,
-              redirect_uri: LOOPBACK_URI,
-              state,
-              code_challenge: challenge,
-              code_challenge_method: 'S256',
-              ...cfg.params
-            }
-      ).toString()
-      shell.openExternal(url.toString())
+      shell.openExternal(startUrl(state).toString())
     })
+  })
+  return { state, query }
+}
+
+/** Opens the provider's consent page in the browser and resolves with tokens once the user agrees. */
+export async function authorize(provider: AccountProvider): Promise<Tokens> {
+  const cfg = CONFIG[provider]
+  if (!isConfigured(provider)) throw new OAuthError('Sign-in with this provider is not configured in this build')
+  const verifier = base64url(randomBytes(32))
+  const challenge = base64url(createHash('sha256').update(verifier).digest())
+  const { query } = await browserSignIn((state) => {
+    const url = new URL(SITE ? `${SITE}/auth/${provider}/start` : cfg.authUrl)
+    url.search = new URLSearchParams(
+      SITE
+        ? { state, code_challenge: challenge }
+        : {
+            response_type: 'code',
+            client_id: cfg.clientId,
+            redirect_uri: LOOPBACK_URI,
+            state,
+            code_challenge: challenge,
+            code_challenge_method: 'S256',
+            ...cfg.params
+          }
+    ).toString()
+    return url
   })
   return tokenRequest(provider, {
     grant_type: 'authorization_code',
-    code,
+    code: query.get('code') ?? '',
     code_verifier: verifier,
     // The site adds its own redirect URI.
     ...(SITE ? {} : { redirect_uri: LOOPBACK_URI })
   })
 }
 
+/** What Notion's token endpoint returns, as the site passes it on. */
+export interface NotionGrant {
+  access_token: string
+  refresh_token?: string
+  expires_in?: number
+  bot_id: string
+  workspace_id: string
+  workspace_name?: string | null
+  workspace_icon?: string | null
+  /** The copy of the template page, when the user chose the template on the consent page. */
+  duplicated_template_id?: string | null
+}
+
+/** Signs in to Notion through the site; the tokens arrive sealed to a key only this sign-in holds. */
+export async function authorizeNotion(): Promise<{ grant: NotionGrant; tokens: Tokens }> {
+  if (!SITE) throw new OAuthError('Notion needs the Oats site (MAIN_VITE_AUTH_URL) in this build')
+  const ecdh = createECDH('prime256v1')
+  const key = base64url(ecdh.generateKeys())
+  const { state, query } = await browserSignIn((state) => {
+    const url = new URL(`${SITE}/auth/notion/start`)
+    url.search = new URLSearchParams({ state, key }).toString()
+    return url
+  })
+  let grant: NotionGrant
+  try {
+    grant = JSON.parse(openSealed(query.get('sealed') ?? '', ecdh, state)) as NotionGrant
+  } catch {
+    throw new OAuthError('Sign-in failed')
+  }
+  if (!grant.access_token) throw new OAuthError('Sign-in failed')
+  return { grant, tokens: tokensFrom(grant) }
+}
+
+/** Reverses the site's seal(): ephemeral public key (65 bytes) ‖ IV (12) ‖ AES-256-GCM ciphertext with its tag. */
+function openSealed(sealed: string, ecdh: ReturnType<typeof createECDH>, state: string) {
+  const data = Buffer.from(sealed, 'base64url')
+  const shared = ecdh.computeSecret(data.subarray(0, 65))
+  const key = Buffer.from(hkdfSync('sha256', shared, Buffer.alloc(0), 'oats-oauth', 32))
+  const decipher = createDecipheriv('aes-256-gcm', key, data.subarray(65, 77))
+  decipher.setAAD(Buffer.from(state))
+  decipher.setAuthTag(data.subarray(data.length - 16))
+  return Buffer.concat([decipher.update(data.subarray(77, data.length - 16)), decipher.final()]).toString('utf8')
+}
+
 /** New access token; the refresh token is kept when the provider doesn't rotate it. */
-export async function refreshTokens(provider: AccountProvider, tokens: Tokens): Promise<Tokens> {
+export async function refreshTokens(provider: OAuthProvider, tokens: Tokens): Promise<Tokens> {
   if (!tokens.refreshToken) throw new OAuthError('Access expired', 'invalid_grant')
   const next = await tokenRequest(provider, { grant_type: 'refresh_token', refresh_token: tokens.refreshToken })
   return { ...next, refreshToken: next.refreshToken ?? tokens.refreshToken }
@@ -230,14 +294,15 @@ export async function revokeTokens(provider: AccountProvider, tokens: Tokens) {
   }
 }
 
-async function tokenRequest(provider: AccountProvider, params: Record<string, string>): Promise<Tokens> {
-  const cfg = CONFIG[provider]
-  const res = await fetch(SITE ? `${SITE}/api/oauth/${provider}/token` : cfg.tokenUrl, {
+async function tokenRequest(provider: OAuthProvider, params: Record<string, string>): Promise<Tokens> {
+  if (!SITE && provider === 'notion') throw new OAuthError('Notion needs the Oats site (MAIN_VITE_AUTH_URL) in this build')
+  const cfg = provider === 'notion' ? null : CONFIG[provider]
+  const res = await fetch(SITE || !cfg ? `${SITE}/api/oauth/${provider}/token` : cfg.tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       // The site holds the client and its secret.
-      ...(SITE ? {} : { client_id: cfg.clientId, ...(cfg.clientSecret ? { client_secret: cfg.clientSecret } : {}) }),
+      ...(SITE || !cfg ? {} : { client_id: cfg.clientId, ...(cfg.clientSecret ? { client_secret: cfg.clientSecret } : {}) }),
       ...params
     })
   })
@@ -251,9 +316,11 @@ async function tokenRequest(provider: AccountProvider, params: Record<string, st
   if (!res.ok || !json.access_token) {
     throw new OAuthError(json.error_description || json.error || `Token request failed (${res.status})`, json.error)
   }
-  return {
-    accessToken: json.access_token,
-    refreshToken: json.refresh_token,
-    expiresAt: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined
-  }
+  return tokensFrom({ ...json, access_token: json.access_token })
 }
+
+const tokensFrom = (json: { access_token: string; refresh_token?: string; expires_in?: number }): Tokens => ({
+  accessToken: json.access_token,
+  refreshToken: json.refresh_token,
+  expiresAt: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined
+})

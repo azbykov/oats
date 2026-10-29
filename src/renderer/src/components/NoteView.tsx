@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   Copy,
   Download,
+  ExternalLink,
   FileText,
   Folder,
   FolderPlus,
@@ -13,12 +14,14 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  Upload,
   UserPlus,
   Users,
   X
 } from 'lucide-react'
-import { useCallback, useRef, useState, type ReactNode } from 'react'
-import type { Note, Template } from '../../../shared/types'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import type { Note, NotionPageRef, Template } from '../../../shared/types'
+import { errorMessage } from './Accounts'
 import { streamEnhance } from '../lib/ai'
 import { dayLabel, fullDate, noteTitle, timeLabel, transcriptText } from '../lib/format'
 import { htmlToMarkdown, markAuthorship, markdownToHtml } from '../lib/markdown'
@@ -205,6 +208,42 @@ function TemplateMenu({
 }
 
 /** Asks before deleting generated notes the user has edited. */
+/** The note's page in Notion and saving to it; "Saved" shows for a few seconds after a save. */
+function useNotion(noteId: string) {
+  const integration = useStore((s) => s.integrations.find((i) => i.provider === 'notion'))
+  const connected = !!integration
+  const [page, setPage] = useState<NotionPageRef | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
+  useEffect(() => {
+    setPage(null)
+    setJustSaved(false)
+    if (!connected) return
+    let live = true
+    window.oats.notionPage(noteId).then((p) => live && setPage(p))
+    return () => {
+      live = false
+    }
+  }, [noteId, connected])
+  useEffect(() => {
+    if (!justSaved) return
+    const t = window.setTimeout(() => setJustSaved(false), 4000)
+    return () => window.clearTimeout(t)
+  }, [justSaved])
+  const save = async (req: Parameters<typeof window.oats.saveToNotion>[0]) => {
+    if (saving) return
+    setSaving(true)
+    setJustSaved(false)
+    try {
+      setPage(await window.oats.saveToNotion(req))
+      setJustSaved(true)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return { connected, ready: !!integration?.target, page, saving, justSaved, save }
+}
+
 function EditedWarning({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
     <div
@@ -245,6 +284,7 @@ export function NoteView({ id }: { id: string }) {
   const [copied, setCopied] = useState(false)
   // A generated tab the user edited, waiting for them to confirm deleting it.
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const notion = useNotion(id)
 
   const onNotesChange = useCallback(
     (html: string) => updateNote(id, { notesHtml: html, notesMarkdown: htmlToMarkdown(html) }),
@@ -308,9 +348,24 @@ export function NoteView({ id }: { id: string }) {
     setView('mine')
   }
 
-  const currentMarkdown = () => {
-    const body = panel ? htmlToMarkdown(panel.html) : note.notesMarkdown
-    return `# ${noteTitle(note)}\n\n${body}`
+  /** What is on screen: the open generated tab or the user's own notes. */
+  const currentBody = () => (panel ? htmlToMarkdown(panel.html) : note.notesMarkdown)
+  const currentMarkdown = () => `# ${noteTitle(note)}\n\n${currentBody()}`
+  const saveToNotion = async () => {
+    setError(null)
+    const folders = useStore.getState().data!.folders
+    try {
+      await notion.save({
+        noteId: note.id,
+        title: noteTitle(note),
+        date: note.createdAt,
+        attendees: note.attendees.map((a) => (a.email ? `${a.name} <${a.email}>` : a.name)),
+        folders: folders.filter((f) => note.folderIds.includes(f.id)).map((f) => f.name),
+        markdown: currentBody()
+      })
+    } catch (err) {
+      setError(`Couldn’t save to Notion: ${errorMessage(err)}`)
+    }
   }
   const copy = async () => {
     await navigator.clipboard.writeText(currentMarkdown())
@@ -342,6 +397,12 @@ export function NoteView({ id }: { id: string }) {
             {focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </IconButton>
           <FolderPicker note={note} />
+          {notion.saving && <span className="px-2 text-[12px] text-ink-tertiary">Saving to Notion…</span>}
+          {notion.justSaved && notion.page && (
+            <Button variant="ghost" size="sm" onClick={() => window.oats.openExternal(notion.page!.url)}>
+              <Check size={14} /> Saved to Notion
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={copy}>
             {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
           </Button>
@@ -371,6 +432,28 @@ export function NoteView({ id }: { id: string }) {
                 >
                   <FileText size={14} /> Copy transcript
                 </MenuItem>
+                {notion.connected && (
+                  <MenuItem
+                    onClick={() => {
+                      close()
+                      // Without a database the user picks where notes go first.
+                      if (notion.ready) saveToNotion()
+                      else navigate({ view: 'settings', tab: 'integrations' })
+                    }}
+                  >
+                    <Upload size={14} /> {notion.page ? 'Update in Notion' : notion.ready ? 'Save to Notion' : 'Save to Notion…'}
+                  </MenuItem>
+                )}
+                {notion.connected && notion.page && (
+                  <MenuItem
+                    onClick={() => {
+                      close()
+                      window.oats.openExternal(notion.page!.url)
+                    }}
+                  >
+                    <ExternalLink size={14} /> Open in Notion
+                  </MenuItem>
+                )}
                 <MenuItem
                   danger
                   onClick={() => {

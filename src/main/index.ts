@@ -21,6 +21,7 @@ import type {
   EnhanceRequest,
   MeetingApp,
   MeetingStart,
+  NotionSaveRequest,
   PermissionKind,
   PillAction,
   RecordingMeta,
@@ -38,6 +39,16 @@ import { abort, chat, enhance, listOpenAIModels } from './ai'
 import { cliStatus, type CliKind } from './ai-cli'
 import * as asr from './asr'
 import { fetchCalendar } from './calendar'
+import {
+  connectNotion,
+  disconnectIntegration,
+  integrationProviders,
+  listIntegrations,
+  notionPage,
+  notionParents,
+  saveToNotion,
+  setNotionParent
+} from './integrations'
 import { claimInstance, otherInstance } from './instance'
 import { activeMeetingApps, setMeetingDetection, type MeetingHandlers } from './meetings'
 import { cancelAuthorization } from './oauth'
@@ -318,6 +329,16 @@ function setupIpc() {
   ipcMain.handle('accounts:set-calendar', (_e, id: string, calendarId: string, enabled: boolean) =>
     setCalendarEnabled(id, calendarId, enabled)
   )
+
+  ipcMain.handle('integrations:list', () => listIntegrations())
+  ipcMain.handle('integrations:providers', () => integrationProviders())
+  ipcMain.handle('integrations:disconnect', (_e, id: string) => disconnectIntegration(id))
+  // Cancelled like an account sign-in, with accounts:cancel.
+  ipcMain.handle('notion:connect', () => connectNotion())
+  ipcMain.handle('notion:parents', () => notionParents())
+  ipcMain.handle('notion:set-parent', (_e, pageId: string) => setNotionParent(pageId))
+  ipcMain.handle('notion:save', (_e, req: NotionSaveRequest) => saveToNotion(req))
+  ipcMain.handle('notion:page', (_e, noteId: string) => notionPage(noteId))
 
   ipcMain.handle('media:system-audio-mode', () =>
     process.platform === 'win32' ? 'loopback' : coreAudioTap ? 'tap' : 'screen'

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, safeStorage } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -6,6 +6,7 @@ import type { Account, AccountCalendar, AccountProvider, CalendarEvent } from '.
 import { ApiError, type CalendarApi, type Credentials } from './calendar-api'
 import { google } from './google'
 import { authorize, isConfigured, OAuthError, refreshTokens, revokeTokens, type Tokens } from './oauth'
+import { seal, unseal } from './sealed'
 import { CalDavAuthError, yandex } from './yandex'
 
 // Signed-in accounts live apart from the notes database (oats.db), which is handed to the
@@ -57,13 +58,6 @@ function persist() {
   const list = listAccounts()
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send('accounts:changed', list)
 }
-
-function seal(value: Tokens | string) {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is not available on this computer')
-  return safeStorage.encryptString(JSON.stringify(value)).toString('base64')
-}
-
-const unseal = <T>(sealed: string) => JSON.parse(safeStorage.decryptString(Buffer.from(sealed, 'base64'))) as T
 
 const credentials = (account: StoredAccount, token: string): Credentials => ({
   token,

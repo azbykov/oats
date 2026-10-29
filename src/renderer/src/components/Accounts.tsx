@@ -7,7 +7,7 @@ import { Avatar, Button } from './ui'
 export const PROVIDER_LABEL: Record<AccountProvider, string> = { google: 'Google', yandex: 'Yandex' }
 
 // ipcRenderer.invoke wraps errors thrown in the main process.
-const errorMessage = (err: unknown) =>
+export const errorMessage = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (?:\w*Error: )?/, '')
 
 function AccountCard({ account }: { account: Account }) {

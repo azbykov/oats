@@ -24,6 +24,7 @@ function useTheme() {
 
 function useAccounts() {
   useEffect(() => window.oats.onAccountsChanged(useStore.getState().setAccounts), [])
+  useEffect(() => window.oats.onIntegrationsChanged(useStore.getState().setIntegrations), [])
 }
 
 function useCalendar() {

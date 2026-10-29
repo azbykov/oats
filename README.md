@@ -158,6 +158,7 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 | Редактирование | Удаление строк транскрипта, вставка без форматирования ⌘⇧V, предупреждение перед удалением правленого конспекта |
 | Focus mode | ⌘⇧F: без сайдбара, шапка появляется при наведении; Esc — выход |
 | Папки, поиск ⌘K, тёмная тема | Есть; экспорт в Markdown, копирование |
+| Save to Notion | **Settings → Integrations**: подключение через сайт Oats, база «Oats Notes»; открытая вкладка заметки уходит на свою страницу (Markdown API Notion), повторное сохранение её обновляет — см. [docs/notion.md](docs/notion.md) |
 
 ## Как устроено
 
@@ -165,7 +166,8 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
   `node:sqlite`, WAL; строки транскрипта — отдельные записи, поиск — FTS5 с trigram; старый `oats-data.json`
   переносится при первом запуске и остаётся как `oats-data.json.bak`),
   вызовы Claude / OpenAI (`ai.ts`), парсер ICS (`ics.ts`), обработчик системного звука; вход через Google / Яндекс
-  (`oauth.ts`, `accounts.ts`) и их календари (`google.ts`, `yandex.ts`, сводит всё `calendar.ts`).
+  (`oauth.ts`, `accounts.ts`) и их календари (`google.ts`, `yandex.ts`, сводит всё `calendar.ts`); Notion
+  (`integrations.ts`, `notion.ts`).
 - `src/preload` — мост `window.oats`.
 - `src/sidecar` — тот же CLI `oats-audio` на Node (Windows, Intel Mac): `listen` / `transcribe` / `prepare-asr` на
   whisper.cpp ([`@fugood/whisper.node`](https://github.com/mybigday/whisper.node), MIT; ggml-модели в
@@ -194,7 +196,8 @@ Deepgram с ключами пользователя.
 
 ## Ограничения
 
-- Нет облака, шаринга и интеграций (Slack, Notion, CRM). Запись при обнаружении звонка не стартует
+- Нет облака, шаринга и интеграций, кроме Notion (Slack, CRM — нет). Notion подключается только через сайт Oats
+  (`MAIN_VITE_AUTH_URL`). Запись при обнаружении звонка не стартует
   сама — только по кнопке «Take notes».
 - Поиск по смыслу есть только на Apple Silicon и Windows x64: у `onnxruntime-node` нет сборки для Intel Mac.
 - Разделяются только собеседники из системного звука; люди рядом с вами в одной комнате попадают в «Me».

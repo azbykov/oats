@@ -188,6 +188,47 @@ export interface Account {
   needsAppPassword?: boolean
 }
 
+export type IntegrationProvider = 'notion'
+
+/** A connected Notion workspace. Its tokens stay in the main process. */
+export interface Integration {
+  id: string
+  provider: IntegrationProvider
+  workspaceName: string
+  /** An emoji or an image URL. */
+  workspaceIcon?: string
+  connectedAt: string
+  /** The Notion database notes are saved to; unset until one is found or created. */
+  target?: { title: string; url: string }
+  /** Set when Notion needs to be connected again or the database was lost. */
+  error?: string
+}
+
+/** A Notion page Oats can create its database in. */
+export interface NotionParentPage {
+  id: string
+  title: string
+  icon?: string
+}
+
+/** What "Save to Notion" sends: the note's text as it is on screen. */
+export interface NotionSaveRequest {
+  noteId: string
+  title: string
+  /** ISO date of the meeting. */
+  date: string
+  attendees: string[]
+  folders: string[]
+  markdown: string
+}
+
+/** The Notion page a note was saved to. */
+export interface NotionPageRef {
+  pageId: string
+  url: string
+  savedAt: string
+}
+
 export type Theme = 'system' | 'light' | 'dark'
 
 export type TranscriptionProvider = 'deepgram' | 'whisper'

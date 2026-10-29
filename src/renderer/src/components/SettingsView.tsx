@@ -3,14 +3,16 @@ import type { CliStatus, SemanticStatus, Settings, WhisperModel } from '../../..
 import { isMac, thisComputer } from '../lib/platform'
 import { useStore } from '../lib/store'
 import { AccountsSettings } from './Accounts'
+import { IntegrationsSettings } from './Integrations'
 import { PermissionsList } from './Permissions'
 import { Button } from './ui'
 
-type Tab = 'general' | 'accounts' | 'ai' | 'transcription' | 'calendar'
+type Tab = 'general' | 'accounts' | 'integrations' | 'ai' | 'transcription' | 'calendar'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'accounts', label: 'Accounts' },
+  { id: 'integrations', label: 'Integrations' },
   { id: 'ai', label: 'AI' },
   { id: 'transcription', label: 'Transcription' },
   { id: 'calendar', label: 'Calendar' }
@@ -124,6 +126,15 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                 hint={`Sign in with Google or Yandex to see their calendars in Coming up. Oats only reads calendars; sign-in tokens are encrypted on ${thisComputer}.`}
               >
                 <AccountsSettings />
+              </Row>
+            )}
+
+            {tab === 'integrations' && (
+              <Row
+                label="Notion"
+                hint={`Save notes to a Notion database: the open tab of a note goes to its own page, and saving again updates it. The sign-in token is encrypted on ${thisComputer}; to take Oats’ access away completely, remove it in Notion → Settings → Connections.`}
+              >
+                <IntegrationsSettings />
               </Row>
             )}
 

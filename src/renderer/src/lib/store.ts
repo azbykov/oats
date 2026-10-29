@@ -4,6 +4,7 @@ import type {
   AppData,
   CalendarEvent,
   Folder,
+  Integration,
   MeetingApp,
   Note,
   Panel,
@@ -18,7 +19,7 @@ export type Route =
   | { view: 'note'; id: string }
   | { view: 'folder'; id: string }
   | { view: 'templates' }
-  | { view: 'settings'; tab?: 'general' | 'accounts' | 'ai' | 'transcription' | 'calendar' }
+  | { view: 'settings'; tab?: 'general' | 'accounts' | 'integrations' | 'ai' | 'transcription' | 'calendar' }
 
 export type RecordingStatus = 'idle' | 'starting' | 'recording' | 'paused' | 'error'
 
@@ -31,6 +32,8 @@ interface State {
   eventsErrors: string[]
   /** Signed-in Google / Yandex accounts (tokens stay in the main process). */
   accounts: Account[]
+  /** Connected Notion workspace (tokens stay in the main process). */
+  integrations: Integration[]
   searchOpen: boolean
   /** Note view without the sidebar and with the header hidden until hovered. */
   focusMode: boolean
@@ -57,6 +60,7 @@ interface State {
   setFocusMode: (on: boolean) => void
   setEvents: (events: CalendarEvent[], errors?: string[]) => void
   setAccounts: (accounts: Account[]) => void
+  setIntegrations: (integrations: Integration[]) => void
 
   createNote: (init?: Partial<Note>) => Note
   createNoteFromEvent: (event: CalendarEvent) => Note
@@ -108,6 +112,7 @@ export const useStore = create<State>((set, get) => {
     events: [],
     eventsErrors: [],
     accounts: [],
+    integrations: [],
     searchOpen: false,
     focusMode: false,
     recording: { noteId: null, status: 'idle', systemAudio: false },
@@ -117,8 +122,12 @@ export const useStore = create<State>((set, get) => {
     meetingApps: [],
 
     load: async () => {
-      const [data, accounts] = await Promise.all([window.oats.loadData(), window.oats.listAccounts()])
-      set({ data, accounts })
+      const [data, accounts, integrations] = await Promise.all([
+        window.oats.loadData(),
+        window.oats.listAccounts(),
+        window.oats.listIntegrations()
+      ])
+      set({ data, accounts, integrations })
     },
     navigate: (route) => set((s) => ({ route, history: [...s.history, s.route].slice(-50) })),
     back: () =>
@@ -131,6 +140,7 @@ export const useStore = create<State>((set, get) => {
     setFocusMode: (focusMode) => set({ focusMode }),
     setEvents: (events, eventsErrors = []) => set({ events, eventsErrors }),
     setAccounts: (accounts) => set({ accounts }),
+    setIntegrations: (integrations) => set({ integrations }),
 
     createNote: (init) => {
       const note: Note = {
