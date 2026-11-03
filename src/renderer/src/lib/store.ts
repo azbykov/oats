@@ -49,6 +49,8 @@ interface State {
   }
   partials: Record<'me' | 'them', string>
   level: number
+  /** Notes being generated; a count, since a stream outlives the note view that started it. */
+  enhancing: number
   diarizing: Record<string, { status: 'running' | 'error'; message?: string }>
   /** Call apps currently using the microphone (meeting detection). */
   meetingApps: MeetingApp[]
@@ -86,6 +88,7 @@ interface State {
   setRecording: (patch: Partial<State['recording']>) => void
   setPartial: (speaker: 'me' | 'them', text: string) => void
   setLevel: (level: number) => void
+  trackEnhancing: (delta: 1 | -1) => void
   setDiarizing: (noteId: string, state: State['diarizing'][string] | null) => void
   setMeetingApps: (apps: MeetingApp[]) => void
 }
@@ -118,6 +121,7 @@ export const useStore = create<State>((set, get) => {
     recording: { noteId: null, status: 'idle', systemAudio: false },
     partials: { me: '', them: '' },
     level: 0,
+    enhancing: 0,
     diarizing: {},
     meetingApps: [],
 
@@ -233,6 +237,7 @@ export const useStore = create<State>((set, get) => {
     setRecording: (patch) => set((s) => ({ recording: { ...s.recording, ...patch } })),
     setPartial: (speaker, text) => set((s) => ({ partials: { ...s.partials, [speaker]: text } })),
     setLevel: (level) => set({ level }),
+    trackEnhancing: (delta) => set((s) => ({ enhancing: s.enhancing + delta })),
     setMeetingApps: (meetingApps) => set({ meetingApps }),
     setDiarizing: (noteId, state) =>
       set((s) => {

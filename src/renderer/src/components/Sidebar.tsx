@@ -1,11 +1,11 @@
 import { Folder, FolderPlus, Home as HomeIcon, LayoutTemplate, Search, Settings, SquarePen, UserRound } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import logo from '../assets/logo.svg'
 import { clock, noteTitle } from '../lib/format'
 import { isMac, shortcut } from '../lib/platform'
 import { useStore } from '../lib/store'
 import { elapsedMs } from '../lib/transcription'
 import { useTicker } from './Transcription'
+import { Logo } from './Logo'
 import { Avatar, DancingBars, IconButton, Kbd } from './ui'
 import { UpdateCard } from './UpdateCard'
 
@@ -41,6 +41,7 @@ export function Sidebar() {
   const notes = useStore((s) => s.data!.notes)
   const recording = useStore((s) => s.recording)
   const level = useStore((s) => s.level)
+  const enhancing = useStore((s) => s.enhancing > 0)
   const account = useStore((s) => s.accounts[0])
   const accountCount = useStore((s) => s.accounts.length)
   const { navigate, createNote, createFolder, setSearchOpen } = useStore.getState()
@@ -65,7 +66,8 @@ export function Sidebar() {
     <aside className="flex w-60 shrink-0 flex-col">
       <div className={`drag flex h-[52px] items-center justify-between px-3 ${isMac ? 'pl-[92px]' : ''}`}>
         <div className="flex items-center gap-2 font-display text-[16px] font-semibold tracking-tight text-ink-strong">
-          <img src={logo} alt="" className="size-5" draggable={false} />
+          {/* no-drag: a drag region swallows the hover that wiggles the logo. */}
+          <Logo busy={enhancing} className="no-drag size-5" />
           Oats
         </div>
         <IconButton label="New note" onClick={() => navigate({ view: 'note', id: createNote().id })}>

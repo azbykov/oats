@@ -29,6 +29,7 @@ import { isMac } from '../lib/platform'
 import { stopTranscription } from '../lib/transcription'
 import { uid, useNote, useStore } from '../lib/store'
 import { ChatDock } from './ChatPanel'
+import { GrainSpinner } from './Logo'
 import { NoteEditor } from './NoteEditor'
 import { TranscribePill, TranscriptDrawer } from './Transcription'
 import { Avatar, Button, Chip, IconButton, MenuItem, MenuLabel, Popover } from './ui'
@@ -275,7 +276,8 @@ export function NoteView({ id }: { id: string }) {
   const isRecordingThis = useStore((s) => s.recording.noteId === id && s.recording.status === 'recording')
   const focusMode = useStore((s) => s.focusMode)
   const setFocusMode = useStore((s) => s.setFocusMode)
-  const { updateNote, addPanel, updatePanel, removePanel, deleteNote, navigate, back } = useStore.getState()
+  const { updateNote, addPanel, updatePanel, removePanel, deleteNote, navigate, back, trackEnhancing } =
+    useStore.getState()
 
   const [view, setView] = useState<string>(() => note?.panels.at(-1)?.id ?? 'mine')
   const [showTranscript, setShowTranscript] = useState(false)
@@ -325,6 +327,7 @@ export function NoteView({ id }: { id: string }) {
       { onDelta: (_d, full) => setGenerating((g) => (g ? { ...g, text: full } : g)) }
     )
     setGenerating({ panelId, text: '', abort: stream.abort })
+    trackEnhancing(1)
     try {
       let md = (await stream.promise).trim()
       const titleMatch = /^#\s+(.+)\n/.exec(md)
@@ -340,6 +343,7 @@ export function NoteView({ id }: { id: string }) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setGenerating(null)
+      trackEnhancing(-1)
     }
   }
 
@@ -557,7 +561,10 @@ export function NoteView({ id }: { id: string }) {
           )}
           {panel && streamingHtml !== null && (
             <div>
-              <div className="shimmer-text mb-3 text-[13px] font-medium">Generating notes…</div>
+              <div className="mb-3 flex items-center gap-2 text-[13px] font-medium text-ink-secondary">
+                <GrainSpinner className="size-3.5" />
+                <span className="shimmer-text">Generating notes…</span>
+              </div>
               <div className="prose-oats pb-40" dangerouslySetInnerHTML={{ __html: streamingHtml }} />
             </div>
           )}
