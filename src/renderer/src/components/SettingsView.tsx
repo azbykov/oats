@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { CliStatus, SemanticStatus, Settings, WhisperModel } from '../../../shared/types'
 import { MicrophoneSelect } from './AudioSettings'
+import { SetupChecklist } from './Setup'
 import { isMac, thisComputer } from '../lib/platform'
 import { useStore } from '../lib/store'
 import { AccountsSettings } from './Accounts'
@@ -8,10 +9,11 @@ import { IntegrationsSettings } from './Integrations'
 import { PermissionsList } from './Permissions'
 import { Button } from './ui'
 
-type Tab = 'general' | 'accounts' | 'integrations' | 'ai' | 'transcription' | 'calendar'
+type Tab = 'general' | 'setup' | 'accounts' | 'integrations' | 'ai' | 'transcription' | 'calendar'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'setup', label: 'Setup' },
   { id: 'accounts', label: 'Accounts' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'ai', label: 'AI' },
@@ -38,7 +40,7 @@ const LANGUAGES = [
   { id: 'ja', label: '日本語' }
 ]
 
-const input =
+export const input =
   'h-9 w-full rounded-lg border border-hairline bg-fill-input px-3 text-[13px] text-ink-primary outline-none focus:border-ink-accent'
 
 function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
@@ -51,7 +53,7 @@ function Row({ label, hint, children }: { label: string; hint?: ReactNode; child
   )
 }
 
-function ExtLink({ href, children }: { href: string; children: ReactNode }) {
+export function ExtLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
       href={href}
@@ -69,6 +71,7 @@ function ExtLink({ href, children }: { href: string; children: ReactNode }) {
 export function SettingsView({ initialTab }: { initialTab?: Tab }) {
   const settings = useStore((s) => s.data!.settings)
   const update = useStore((s) => s.updateSettings)
+  const openSetup = useStore((s) => s.openSetup)
   const [tab, setTab] = useState<Tab>(initialTab ?? 'general')
   const [calendarStatus, setCalendarStatus] = useState<string | null>(null)
   const [diarizer, setDiarizer] = useState<boolean | null>(null)
@@ -119,6 +122,20 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                   </div>
                 </Row>
               </>
+            )}
+
+            {tab === 'setup' && (
+              <Row
+                label="Status"
+                hint="What Oats needs to take notes. It is checked at every launch; when something stops working, a card appears in the sidebar."
+              >
+                <SetupChecklist />
+                <div>
+                  <Button variant="outline" size="sm" className="mt-2" onClick={() => openSetup('permissions')}>
+                    Run setup again
+                  </Button>
+                </div>
+              </Row>
             )}
 
             {tab === 'accounts' && (
@@ -494,7 +511,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
   )
 }
 
-function SemanticSearchModel() {
+export function SemanticSearchModel() {
   const [s, setS] = useState<SemanticStatus | null>(null)
   useEffect(() => {
     window.oats.getSemanticStatus().then(setS)
@@ -548,7 +565,7 @@ function SemanticSearchModel() {
   )
 }
 
-function WhisperModels({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
+export function WhisperModels({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
   const [models, setModels] = useState<WhisperModel[]>([])
   useEffect(() => {
     window.oats.listWhisperModels().then(setModels)

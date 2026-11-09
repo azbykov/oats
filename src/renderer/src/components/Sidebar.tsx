@@ -7,6 +7,7 @@ import { elapsedMs } from '../lib/transcription'
 import { useTicker } from './Transcription'
 import { Logo } from './Logo'
 import { Avatar, DancingBars, IconButton, Kbd } from './ui'
+import { SetupCard } from './Setup'
 import { UpdateCard } from './UpdateCard'
 
 function NavItem({
@@ -145,6 +146,7 @@ export function Sidebar() {
         )}
       </div>
 
+      <SetupCard />
       <UpdateCard />
 
       {recordingNote && (

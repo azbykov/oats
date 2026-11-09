@@ -302,6 +302,8 @@ export interface Settings {
   separateSpeakers: boolean
   /** Keep a local copy of the audio until the session is processed, to recover from failures. */
   keepAudioBackup: boolean
+  /** The first-run setup wizard was finished or skipped. */
+  setupCompleted: boolean
   /** Offer to take notes when a meeting app starts using the microphone. */
   detectMeetings: boolean
   /** Bundle ids of apps the user chose never to be asked about. */

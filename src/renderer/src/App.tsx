@@ -5,9 +5,11 @@ import { Home } from './components/Home'
 import { NoteView } from './components/NoteView'
 import { SearchDialog } from './components/SearchDialog'
 import { SettingsView } from './components/SettingsView'
+import { SetupWizard, useFirstRun } from './components/Setup'
 import { Sidebar } from './components/Sidebar'
 import { TemplatesView } from './components/TemplatesView'
 import { recoverLeftovers } from './lib/postprocess'
+import { useSetupMonitor } from './lib/setup'
 import { useStore } from './lib/store'
 
 function useTheme() {
@@ -91,6 +93,13 @@ export default function App() {
   }, [focus])
 
   if (!loaded) return <div className="drag h-full" />
+  return <Loaded focus={focus} route={route} />
+}
+
+/** Hooks that need the loaded data (settings) live below the loading gate. */
+function Loaded({ focus, route }: { focus: boolean; route: ReturnType<typeof useStore.getState>['route'] }) {
+  useSetupMonitor()
+  useFirstRun()
 
   return (
     <div className="flex h-full">
@@ -104,6 +113,7 @@ export default function App() {
         {route.view === 'settings' && <SettingsView key={route.tab} initialTab={route.tab} />}
       </main>
       <SearchDialog />
+      <SetupWizard />
     </div>
   )
 }

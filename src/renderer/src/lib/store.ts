@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SetupStep } from './setup'
 import type {
   Account,
   AppData,
@@ -19,13 +20,15 @@ export type Route =
   | { view: 'note'; id: string }
   | { view: 'folder'; id: string }
   | { view: 'templates' }
-  | { view: 'settings'; tab?: 'general' | 'accounts' | 'integrations' | 'ai' | 'transcription' | 'calendar' }
+  | { view: 'settings'; tab?: 'general' | 'setup' | 'accounts' | 'integrations' | 'ai' | 'transcription' | 'calendar' }
 
 export type RecordingStatus = 'idle' | 'starting' | 'recording' | 'paused' | 'error'
 
 interface State {
   data: AppData | null
   route: Route
+  /** The setup wizard's open step; null when it is closed. */
+  setupStep: SetupStep | null
   history: Route[]
   events: CalendarEvent[]
   /** Calendar sources that failed on the last refresh. */
@@ -59,6 +62,7 @@ interface State {
 
   load: () => Promise<void>
   navigate: (route: Route) => void
+  openSetup: (step: SetupStep | null) => void
   back: () => void
   setSearchOpen: (open: boolean) => void
   setFocusMode: (on: boolean) => void
@@ -113,6 +117,7 @@ export const useStore = create<State>((set, get) => {
   return {
     data: null,
     route: { view: 'home' },
+    setupStep: null,
     history: [],
     events: [],
     eventsErrors: [],
@@ -135,6 +140,7 @@ export const useStore = create<State>((set, get) => {
       ])
       set({ data, accounts, integrations })
     },
+    openSetup: (setupStep) => set({ setupStep }),
     navigate: (route) => set((s) => ({ route, history: [...s.history, s.route].slice(-50) })),
     back: () =>
       set((s) => {

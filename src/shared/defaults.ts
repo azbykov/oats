@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   separateSpeakers: true,
   keepAudioBackup: true,
   detectMeetings: true,
+  setupCompleted: false,
   ignoredMeetingApps: []
 }
 
