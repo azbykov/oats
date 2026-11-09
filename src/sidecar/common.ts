@@ -157,12 +157,19 @@ function variant(): LibVariant {
   return process.platform === 'darwin' ? 'default' : 'vulkan'
 }
 
+/**
+ * ggml's Metal backend targets Apple Silicon. On Intel Macs it can hang while it
+ * compiles its shaders (seen on CI's macos-15-intel runner: prepare-asr stuck
+ * after ggml_metal_library_init) and is rarely faster than the CPU there.
+ */
+const useGpu = !(process.platform === 'darwin' && process.arch === 'x64')
+
 const loaded = new Set<WhisperContext>()
 
 export async function loadWhisper(modelPath: string): Promise<WhisperContext> {
   const { initWhisper } = await import('@fugood/whisper.node')
   try {
-    const ctx = await initWhisper({ filePath: modelPath, useGpu: true }, variant())
+    const ctx = await initWhisper({ filePath: modelPath, useGpu }, variant())
     loaded.add(ctx)
     return ctx
   } catch (err) {
