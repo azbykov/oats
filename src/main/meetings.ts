@@ -1,12 +1,16 @@
 import { BrowserWindow } from 'electron'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import type { MeetingApp } from '../shared/types'
+import type { MeetingApp, MicInput } from '../shared/types'
 import { spawnAudio } from './sidecar'
 
 // Meeting detection: `oats-audio watch-mic` reports which apps are recording from
 // the microphone (Core Audio process objects on macOS 14.2+, the privacy usage
 // records on Windows). When a known call app starts, Oats offers to take notes
 // (the floating card in pill.ts), the way Notion's MicrophoneUsageMonitor does.
+//
+// The same watcher tells which input device the call records from (macOS only),
+// so a session can open that microphone rather than the system default
+// ("Same as the call" in Settings → Transcription).
 
 const CALL_APPS: Record<string, string> = {
   'us.zoom.xos': 'Zoom',
@@ -63,8 +67,16 @@ function describe(reported: string): MeetingApp | null {
 }
 
 let proc: ChildProcessWithoutNullStreams | null = null
-let enabled = false
+/** Offer notes when a call starts (Settings → Detect meetings). */
+let detecting = false
+/** A recording wants to know which microphone the call uses. */
+let following = false
+let handlers: MeetingHandlers | null = null
 let active = new Map<string, MeetingApp>()
+let callInputs: MicInput[] = []
+/** Resolves on the watcher's first report, so a fresh start can be waited for. */
+let firstReport: Promise<void> | null = null
+let reported: (() => void) | null = null
 let restartTimer: NodeJS.Timeout | null = null
 
 function broadcast(channel: string, payload: unknown) {
@@ -77,10 +89,31 @@ export interface MeetingHandlers {
   onEnded: (app: MeetingApp) => void
 }
 
-function update(bundleIds: string[], handlers: MeetingHandlers) {
+interface ReportedApp {
+  bundleId: string
+  inputs?: MicInput[]
+}
+
+/** Input devices of the call apps, dedicated apps before browsers. */
+function inputsOf(apps: ReportedApp[]): MicInput[] {
+  const calls = apps
+    .map((a) => ({ app: describe(a.bundleId), inputs: a.inputs ?? [] }))
+    .filter((a): a is { app: MeetingApp; inputs: MicInput[] } => a.app !== null)
+    .sort((a, b) => Number(a.app.browser) - Number(b.app.browser) || a.app.bundleId.localeCompare(b.app.bundleId))
+  const seen = new Set<string>()
+  return calls.flatMap((c) => c.inputs).filter((i) => !seen.has(i.uid) && !!seen.add(i.uid))
+}
+
+function update(apps: ReportedApp[]) {
+  const inputs = inputsOf(apps)
+  if (JSON.stringify(inputs) !== JSON.stringify(callInputs)) {
+    callInputs = inputs
+    broadcast('mic:call-inputs', inputs)
+  }
+  if (!detecting || !handlers) return
   const now = new Map<string, MeetingApp>()
-  for (const id of bundleIds) {
-    const app = describe(id)
+  for (const { bundleId } of apps) {
+    const app = describe(bundleId)
     if (app && !handlers.isIgnored(app.bundleId)) now.set(app.bundleId, app)
   }
   for (const [id, app] of now) {
@@ -96,19 +129,24 @@ function update(bundleIds: string[], handlers: MeetingHandlers) {
   active = now
 }
 
-export function setMeetingDetection(on: boolean, handlers: MeetingHandlers) {
-  enabled = on
-  if (!on) {
+/** Runs `watch-mic` while meeting detection or a recording needs it. */
+function syncWatcher() {
+  if (!detecting && !following) {
     if (restartTimer) clearTimeout(restartTimer)
-    proc?.kill()
+    restartTimer = null
+    const child = proc
     proc = null
-    active.clear()
+    firstReport = null
+    reported?.()
+    callInputs = []
+    child?.kill()
     return
   }
-  if (proc) return
+  if (proc || restartTimer) return
   const child = spawnAudio(['watch-mic'])
   if (!child) return
   proc = child
+  firstReport = new Promise((resolve) => (reported = resolve))
   let buf = ''
   child.stdout.on('data', (d: Buffer) => {
     buf += d.toString('utf8')
@@ -118,8 +156,11 @@ export function setMeetingDetection(on: boolean, handlers: MeetingHandlers) {
       buf = buf.slice(i + 1)
       if (!line.startsWith('{')) continue
       try {
-        const e = JSON.parse(line) as { type: string; apps: { bundleId: string }[] }
-        if (e.type === 'mic') update(e.apps.map((a) => a.bundleId), handlers)
+        const e = JSON.parse(line) as { type: string; apps: ReportedApp[] }
+        if (e.type === 'mic') {
+          update(e.apps)
+          reported?.()
+        }
       } catch {
         // ignore malformed lines
       }
@@ -128,9 +169,32 @@ export function setMeetingDetection(on: boolean, handlers: MeetingHandlers) {
   child.on('exit', () => {
     if (proc !== child) return
     proc = null
+    reported?.()
     // An unsupported OS version exits immediately; otherwise restart after a crash.
-    if (enabled) restartTimer = setTimeout(() => setMeetingDetection(enabled, handlers), 30_000)
+    restartTimer = setTimeout(() => {
+      restartTimer = null
+      syncWatcher()
+    }, 30_000)
   })
+}
+
+export function setMeetingDetection(on: boolean, meetingHandlers: MeetingHandlers) {
+  detecting = on
+  handlers = meetingHandlers
+  if (!on) active.clear()
+  syncWatcher()
+}
+
+/** A recording starts (true) or stops (false) following the call's microphone. */
+export function followCallMic(on: boolean) {
+  following = on
+  syncWatcher()
+}
+
+/** The input devices the current call records from; empty when unknown. */
+export async function callMicInputs(): Promise<MicInput[]> {
+  if (firstReport) await Promise.race([firstReport, new Promise((r) => setTimeout(r, 2000))])
+  return callInputs
 }
 
 export const activeMeetingApps = () => [...active.values()]

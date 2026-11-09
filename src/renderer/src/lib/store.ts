@@ -42,6 +42,8 @@ interface State {
     status: RecordingStatus
     error?: string
     systemAudio: boolean
+    /** The input device "Me" is recorded from right now. */
+    micLabel?: string
     /** Local Whisper is loading its model; audio is recorded and transcribed once it's ready. */
     loadingModel?: boolean
     /** Why transcription stopped by itself, shown until it is resumed. */

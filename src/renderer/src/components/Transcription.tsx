@@ -4,6 +4,7 @@ import type { Note, TranscriptSegment } from '../../../shared/types'
 import { clock, mergeTranscript, transcriptText } from '../lib/format'
 import { elapsedMs, startTranscription, stopTranscription } from '../lib/transcription'
 import { useStore } from '../lib/store'
+import { AudioMenu } from './AudioSettings'
 import { GrainSpinner } from './Logo'
 import { Button, DancingBars, IconButton } from './ui'
 
@@ -72,6 +73,7 @@ export function TranscribePill({ note, onToggleTranscript }: { note: Note; onTog
           {live && <span className="text-[12px] text-ink-secondary tabular-nums">{clock(elapsedMs())}</span>}
           {!live && !error && hasTranscript && <span className="text-[12px] text-ink-tertiary">Transcript</span>}
         </button>
+        {!error && <AudioMenu live={live} />}
         {error ? (
           <button
             type="button"

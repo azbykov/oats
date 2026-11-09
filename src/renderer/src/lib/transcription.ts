@@ -1,5 +1,5 @@
-import type { Speaker } from '../../../shared/types'
-import { ChannelRecorder, PcmTap } from './capture'
+import type { Settings, Speaker } from '../../../shared/types'
+import { ChannelRecorder, LiveMic, matchMicrophone, microphones, PcmTap } from './capture'
 import { isMac } from './platform'
 import { processSession } from './postprocess'
 import { uid, useStore } from './store'
@@ -19,6 +19,7 @@ interface Channel {
 
 let channels: Channel[] = []
 let ownedStreams: MediaStream[] = []
+let liveMic: LiveMic | null = null
 let taps = new Map<MediaStream, PcmTap>()
 let activeLocal = false
 /** Local Whisper is still loading its model; the session's audio is queued meanwhile. */
@@ -234,6 +235,68 @@ function micConstraints(cancelSystemAudio: boolean): MediaTrackConstraints {
   return constraints
 }
 
+/** The device to record "Me" from; undefined is the system default. */
+async function chosenMic(settings: Settings): Promise<string | undefined> {
+  if (settings.micSource === 'system') return undefined
+  const devices = await microphones()
+  if (settings.micSource === 'device') {
+    const device = devices.find((d) => d.label === settings.micLabel)
+    if (!device) console.warn('The chosen microphone is not connected; using the system default', settings.micLabel)
+    return device?.deviceId
+  }
+  // Plugging in a headset makes it the system default, while the call may well
+  // stay on another mic: record the one the call actually uses.
+  const device = matchMicrophone(devices, await window.oats.callMicInputs())
+  if (device) console.info('Recording from the call’s microphone', device.label)
+  return device?.deviceId
+}
+
+let callMicSubscribed = false
+
+/** Keeps "Me" on the call's microphone when the call switches devices mid-session. */
+function followCallMic() {
+  window.oats.followCallMic(true)
+  if (callMicSubscribed) return
+  callMicSubscribed = true
+  window.oats.onCallMicInputs(async (inputs) => {
+    const mic = liveMic
+    if (!mic || useStore.getState().data?.settings.micSource !== 'call') return
+    const device = matchMicrophone(await microphones(), inputs)
+    if (!device || mic !== liveMic || device.deviceId === mic.deviceId || device.label === mic.label) return
+    console.info('The call switched microphones; following it to', device.label)
+    mic.switchTo(device.deviceId).catch((err) => console.warn('Could not switch microphones', err))
+  })
+}
+
+/**
+ * Audio settings changed mid-session (in Settings or the note's audio menu): the
+ * microphone switches in place; system audio adds or drops a channel, which takes
+ * a restart, the same as pause and resume.
+ */
+async function applyAudioSettings(now: Settings, before: Settings) {
+  const { recording } = useStore.getState()
+  if (recording.status !== 'recording' || !recording.noteId) return
+  if (now.captureSystemAudio !== before.captureSystemAudio) {
+    stopTranscription()
+    await startTranscription(recording.noteId)
+    return
+  }
+  if (now.micSource === before.micSource && now.micLabel === before.micLabel) return
+  const mic = liveMic
+  if (!mic) return
+  if (now.micSource === 'call') followCallMic()
+  else window.oats.followCallMic(false)
+  const deviceId = await chosenMic(now)
+  if (mic !== liveMic || deviceId === mic.deviceId) return
+  await mic.switchTo(deviceId).catch((err) => console.warn('Could not switch microphones', err))
+}
+
+useStore.subscribe((state, prev) => {
+  const now = state.data?.settings
+  const before = prev.data?.settings
+  if (now && before && now !== before) void applyAudioSettings(now, before)
+})
+
 /** One PCM tap per stream, shared by local Whisper and speaker separation. */
 function tapFor(stream: MediaStream) {
   let tap = taps.get(stream)
@@ -285,14 +348,23 @@ async function systemAudio(): Promise<MediaStream | null> {
 export async function startTranscription(noteId: string) {
   const { data, setRecording } = useStore.getState()
   if (!data) return
-  const { transcriptionProvider, deepgramApiKey, language, captureSystemAudio, separateSpeakers, keepAudioBackup } =
-    data.settings
+  const {
+    transcriptionProvider,
+    deepgramApiKey,
+    language,
+    captureSystemAudio,
+    separateSpeakers,
+    keepAudioBackup,
+    micSource
+  } = data.settings
   const local = transcriptionProvider === 'whisper'
   if (!local && !deepgramApiKey) {
     setRecording({ noteId, status: 'error', error: 'Add a Deepgram API key in Settings → Transcription.' })
     return
   }
   if (channels.length || taps.size) stopTranscription()
+  // Start watching early: the call's device is needed once the mic opens.
+  if (micSource === 'call') followCallMic()
   activeLocal = local
   setRecording({ noteId, status: 'starting', error: undefined, systemAudio: false, loadingModel: false, autoStopped: undefined })
 
@@ -317,9 +389,10 @@ export async function startTranscription(noteId: string) {
     if (captureSystemAudio && perms.systemAudio === 'not-determined') {
       systemAllowed = (await window.oats.requestPermission('systemAudio')) === 'granted'
     }
-    const mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(captureSystemAudio) })
-    ownedStreams.push(mic)
-    console.info('Microphone settings', mic.getAudioTracks()[0]?.getSettings())
+    liveMic = await LiveMic.open(await chosenMic(data.settings), micConstraints(captureSystemAudio))
+    setRecording({ micLabel: liveMic.label })
+    liveMic.onSwitch = (label) => useStore.getState().setRecording({ micLabel: label })
+    const mic = liveMic.stream
     const system = systemAllowed ? await systemAudio() : null
 
     // Local copies feed speaker separation and let a failed session be re-transcribed.
@@ -387,6 +460,9 @@ export function stopTranscription() {
   channels = []
   ownedStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()))
   ownedStreams = []
+  liveMic?.stop()
+  liveMic = null
+  window.oats.followCallMic(false)
   cancelAnimationFrame(meterFrame)
   audioCtx?.close()
   audioCtx = null

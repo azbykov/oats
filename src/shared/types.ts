@@ -36,6 +36,17 @@ export interface MeetingApp {
   browser: boolean
 }
 
+/** An input device a call app records from, as Core Audio names it. */
+export interface MicInput {
+  uid: string
+  name: string
+  /** Selected data source on devices that have them (Chromium labels the device by it). */
+  source?: string
+}
+
+/** Which microphone a session records "Me" from. */
+export type MicSource = 'call' | 'system' | 'device'
+
 /** What the floating "meeting detected" card shows. */
 export interface PillState {
   app: MeetingApp
@@ -280,6 +291,13 @@ export interface Settings {
   icsUrl: string
   theme: Theme
   userName: string
+  /**
+   * "call": the microphone the call app uses (macOS 14.2+; the system default until
+   * a call opens one), "system": the system default, "device": `micLabel`.
+   */
+  micSource: MicSource
+  /** The chosen input device's label when `micSource` is "device". */
+  micLabel: string
   captureSystemAudio: boolean
   separateSpeakers: boolean
   /** Keep a local copy of the audio until the session is processed, to recover from failures. */

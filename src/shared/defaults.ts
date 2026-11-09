@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS: Settings = {
   icsUrl: '',
   theme: 'system',
   userName: '',
+  micSource: 'call',
+  micLabel: '',
   captureSystemAudio: true,
   separateSpeakers: true,
   keepAudioBackup: true,

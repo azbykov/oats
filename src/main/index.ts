@@ -50,7 +50,7 @@ import {
   setNotionParent
 } from './integrations'
 import { claimInstance, otherInstance } from './instance'
-import { activeMeetingApps, setMeetingDetection, type MeetingHandlers } from './meetings'
+import { activeMeetingApps, callMicInputs, followCallMic, setMeetingDetection, type MeetingHandlers } from './meetings'
 import { cancelAuthorization } from './oauth'
 import { openPermissionSettings, permissionStatus, requestPermission } from './permissions'
 import { closeMeetingPill, initMeetingPill, showMeetingPill } from './pill'
@@ -315,6 +315,8 @@ function setupIpc() {
   ipcMain.handle('rec:leftovers', () => recordings.leftovers())
 
   ipcMain.handle('meeting:active', () => activeMeetingApps())
+  ipcMain.on('mic:follow', (_e, on: boolean) => followCallMic(on))
+  ipcMain.handle('mic:call-inputs', () => callMicInputs())
   // Settings → "Preview" shows the card without waiting for a real call.
   ipcMain.on('meeting:preview', () => showMeetingPill({ bundleId: 'preview', name: 'Zoom', browser: false }))
 

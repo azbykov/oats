@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { CliStatus, SemanticStatus, Settings, WhisperModel } from '../../../shared/types'
+import { MicrophoneSelect } from './AudioSettings'
 import { isMac, thisComputer } from '../lib/platform'
 import { useStore } from '../lib/store'
 import { AccountsSettings } from './Accounts'
@@ -325,6 +326,16 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                       </option>
                     ))}
                   </select>
+                </Row>
+                <Row
+                  label="Microphone"
+                  hint={
+                    isMac
+                      ? 'Your side of the conversation (“Me”). “Same as the call” records from the mic Zoom, Meet or Teams is using, even when plugging in a headset made another one the system default, and follows the call if it switches (macOS 14.2+). Until the call opens a mic, the system default is used.'
+                      : 'Your side of the conversation (“Me”). “Same as the call” uses the system default on this PC: pick the call’s microphone here if they differ.'
+                  }
+                >
+                  <MicrophoneSelect className={input} />
                 </Row>
                 <Row
                   label="Capture system audio"
