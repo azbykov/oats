@@ -6,7 +6,7 @@ import { DancingBars } from './ui'
 // Content of the floating "meeting detected" window (main/pill.ts). The window is
 // transparent and lets clicks through, except over elements marked data-hit.
 
-const AUTO_DISMISS_MS = 30_000
+const AUTO_DISMISS_MS = 10_000
 
 function useTheme(theme: PillState['theme'] | undefined) {
   useEffect(() => {
