@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import pkg from './package.json'
 
 export default defineConfig({
   main: {
@@ -21,6 +22,8 @@ export default defineConfig({
   },
   preload: { plugins: [externalizeDepsPlugin()] },
   renderer: {
-    plugins: [react(), tailwindcss()]
+    plugins: [react(), tailwindcss()],
+    // Shown in Settings; package.json is the version electron-builder ships.
+    define: { __APP_VERSION__: JSON.stringify(pkg.version) }
   }
 })

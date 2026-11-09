@@ -505,6 +505,10 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
               </Row>
             )}
           </div>
+          <div className="mt-3 select-text text-center text-[11px] text-ink-tertiary tabular-nums">
+            Oats {__APP_VERSION__}
+            {import.meta.env.DEV && ' · dev'}
+          </div>
         </div>
       </div>
     </div>
