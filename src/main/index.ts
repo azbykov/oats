@@ -99,8 +99,9 @@ if (otherCopy) {
 }
 
 let win: BrowserWindow | null = null
-// Packaged apps take their icon from the bundle / exe; in dev Electron would show its own.
-const devIcon = app.isPackaged ? undefined : join(app.getAppPath(), 'resources/icon.png')
+// Packaged apps take their icon from the bundle / exe; in dev Electron would show its own,
+// so set a violet variant that also tells a dev run apart from the installed app.
+const devIcon = app.isPackaged ? undefined : join(app.getAppPath(), 'resources/icon-dev.png')
 loadData()
 if (asr.knownModel(data.settings.whisperModel) !== data.settings.whisperModel)
   updateSettings({ whisperModel: asr.knownModel(data.settings.whisperModel) })

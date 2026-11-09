@@ -1,6 +1,7 @@
 #!/bin/sh
 # Renders the app icons from the logo SVGs (macOS only: sips + iconutil):
 #   resources/icon.svg  (logo on the macOS icon grid) -> icon.icns, icon.png
+#   resources/icon-dev.svg (violet dev variant)       -> icon-dev.png
 #   src/renderer/src/assets/logo.svg (full bleed)     -> icon.ico
 # The results are committed; rerun after changing either SVG.
 set -e
@@ -17,6 +18,8 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$tmp/icon.iconset" -o resources/icon.icns
 cp "$tmp/icon.iconset/icon_512x512@2x.png" resources/icon.png
+# Dev builds (npm run dev) set this one on the window and Dock instead.
+render resources/icon-dev.svg 1024 resources/icon-dev.png
 
 # .ico with PNG-compressed entries (Windows Vista+).
 for size in 16 24 32 48 64 128 256; do
