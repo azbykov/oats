@@ -167,7 +167,8 @@ export function Avatar({ name, src, className = '' }: { name: string; src?: stri
         title={name}
         referrerPolicy="no-referrer"
         onError={() => setBroken(true)}
-        className={`inline-block size-6 shrink-0 rounded-full object-cover ring-2 ring-surface ${className}`}
+        // max-w-none: preflight's img max-width would squeeze it into an oval in a narrower slot.
+        className={`inline-block size-6 max-w-none shrink-0 rounded-full object-cover ring-2 ring-surface ${className}`}
       />
     )
   }

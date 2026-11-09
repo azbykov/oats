@@ -4,6 +4,7 @@ import type { Note, TranscriptSegment } from '../../../shared/types'
 import { clock, mergeTranscript, transcriptText } from '../lib/format'
 import { elapsedMs, startTranscription, stopTranscription } from '../lib/transcription'
 import { useStore } from '../lib/store'
+import { GrainSpinner } from './Logo'
 import { Button, DancingBars, IconButton } from './ui'
 
 export function useTicker(active: boolean) {
@@ -43,6 +44,7 @@ export function TranscribePill({ note, onToggleTranscript }: { note: Note; onTog
         </div>
       ) : loadingModel ? (
         <div className="absolute bottom-full left-0 mb-2 w-max max-w-80 rounded-2xl border border-hairline bg-surface-elevated px-3 py-1.5 text-[12px] leading-snug text-ink-secondary shadow-md">
+          <GrainSpinner className="mr-1.5 inline-block size-3 align-[-2px]" />
           <span className="shimmer-text">Preparing the Whisper model…</span> Audio is being recorded; the transcript
           will catch up.
         </div>
@@ -166,7 +168,10 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
           <div className="text-[13px] font-medium text-ink-primary">Transcript</div>
           <div className="text-[11px] text-ink-tertiary">
             {loadingModel ? (
-              <span className="shimmer-text">Preparing the Whisper model…</span>
+              <span className="flex items-center gap-1.5">
+                <GrainSpinner className="size-3" />
+                <span className="shimmer-text">Preparing the Whisper model…</span>
+              </span>
             ) : live ? (
               recording.systemAudio ? (
                 'Listening to your mic and system audio'
@@ -174,7 +179,10 @@ export function TranscriptDrawer({ note, onClose }: { note: Note; onClose: () =>
                 'Listening to your mic only'
               )
             ) : diarizing?.status === 'running' ? (
-              <span className="shimmer-text">{diarizing.message ?? 'Processing audio…'}</span>
+              <span className="flex items-center gap-1.5">
+                <GrainSpinner className="size-3" />
+                <span className="shimmer-text">{diarizing.message ?? 'Processing audio…'}</span>
+              </span>
             ) : diarizing?.status === 'error' ? (
               <span className="text-ink-danger" title={diarizing.message}>
                 {diarizing.message?.startsWith('Download')

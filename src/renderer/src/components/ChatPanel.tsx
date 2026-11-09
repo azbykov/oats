@@ -6,6 +6,7 @@ import { dayLabel, fullDate, noteTitle } from '../lib/format'
 import { markdownToHtml } from '../lib/markdown'
 import { chatContext } from '../lib/retrieval'
 import { useStore } from '../lib/store'
+import { GrainSpinner } from './Logo'
 import { IconButton } from './ui'
 
 type Message = ChatMessage & {
@@ -227,8 +228,11 @@ export function ChatDock({
                       dangerouslySetInnerHTML={{ __html: answerHtml(m.content, byRef) }}
                     />
                   ) : (
-                    <div className="shimmer-text text-[14px]">
-                      {scope !== 'note' && !m.read ? 'Searching your meetings…' : 'Thinking…'}
+                    <div className="flex items-center gap-2 text-[14px] text-ink-secondary">
+                      <GrainSpinner />
+                      <span className="shimmer-text">
+                        {scope !== 'note' && !m.read ? 'Searching your meetings…' : 'Thinking…'}
+                      </span>
                     </div>
                   )}
                   {!(streaming && i === messages.length - 1) && <Sources notes={citedNotes(m.content, byRef)} />}
