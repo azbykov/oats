@@ -66,7 +66,7 @@ import {
   semanticStatus,
   touchNotes
 } from './semantic'
-import { installUpdate, startUpdateChecks, updateState } from './updates'
+import { checkForUpdatesNow, installUpdate, startUpdateChecks, updateState } from './updates'
 
 // Lets a second copy (or a test run) keep its data separate.
 if (process.env.OATS_USER_DATA) app.setPath('userData', process.env.OATS_USER_DATA)
@@ -229,8 +229,30 @@ const meetingHandlers: MeetingHandlers = {
 
 function setupMenu() {
   const send = (channel: string) => () => win?.webContents.send(channel)
+  const checkForUpdates: Electron.MenuItemConstructorOptions = {
+    label: 'Check for Updates…',
+    click: () => void checkForUpdatesNow(win && !win.isDestroyed() ? win : undefined)
+  }
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(process.platform === 'darwin' ? [{ role: 'appMenu' } as const] : []),
+    ...(process.platform === 'darwin'
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              checkForUpdates,
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ]
+          } satisfies Electron.MenuItemConstructorOptions
+        ]
+      : []),
     {
       label: 'File',
       submenu: [
@@ -245,7 +267,8 @@ function setupMenu() {
     },
     { role: 'editMenu' },
     { role: 'viewMenu' },
-    { role: 'windowMenu' }
+    { role: 'windowMenu' },
+    ...(process.platform === 'darwin' ? [] : [{ role: 'help', submenu: [checkForUpdates] } satisfies Electron.MenuItemConstructorOptions])
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
