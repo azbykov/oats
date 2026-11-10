@@ -11,10 +11,12 @@ export default defineConfig({
       rollupOptions: {
         // oats-audio.js: the Node audio sidecar (whisper.cpp / sherpa-onnx), spawned
         // with ELECTRON_RUN_AS_NODE where the Swift one can't run. embedder.js: the
-        // embedding model's utility process (semantic search).
+        // embedding model's utility process (semantic search). oats-silo.js: the
+        // database's utility process.
         input: {
           index: resolve('src/main/index.ts'),
           'oats-audio': resolve('src/sidecar/index.ts'),
+          'oats-silo': resolve('src/silo/index.ts'),
           embedder: resolve('src/main/embedder.ts')
         }
       }

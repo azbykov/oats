@@ -5,6 +5,7 @@ mac:
   files:
     - "!**/node_modules/sherpa-onnx-darwin-x64/**"
     - "!**/node_modules/@fugood/node-whisper-darwin-x64/**"
+    - "!**/node_modules/better-sqlite3-multiple-ciphers/prebuilds/darwin-x64.node"
   extraResources:
     - from: native/audio/.build/release/oats-audio
       to: oats-audio

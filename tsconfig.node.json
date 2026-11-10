@@ -2,7 +2,8 @@
   "compilerOptions": {
     "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
     "strict": true, "esModuleInterop": true, "skipLibCheck": true,
-    "types": ["node"], "composite": true, "noEmit": true
+    "types": ["node"], "composite": true, "noEmit": true,
+    "paths": { "better-sqlite3-multiple-ciphers": ["./node_modules/better-sqlite3-multiple-ciphers/index.d.ts"] }
   },
-  "include": ["electron.vite.config.ts", "src/main/**/*", "src/sidecar/**/*", "src/preload/**/*", "src/shared/**/*"]
+  "include": ["electron.vite.config.ts", "src/main/**/*", "src/sidecar/**/*", "src/silo/**/*", "src/preload/**/*", "src/shared/**/*"]
 }

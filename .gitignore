@@ -13,3 +13,6 @@ native/tcc/build
 !.dev.vars.example
 !.env.example
 native/tcc/arch
+
+# Working notes, kept locally only.
+docs/
