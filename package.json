@@ -28,6 +28,7 @@
     "@huggingface/tokenizers": "^0.2.0",
     "@tiptap/extension-mention": "^3.32.0",
     "@tiptap/suggestion": "^3.32.0",
+    "better-sqlite3-multiple-ciphers": "13.0.3",
     "electron-updater": "^6.8.11",
     "onnxruntime-node": "^1.31.1",
     "openai": "^7.43.0",

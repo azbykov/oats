@@ -8,9 +8,9 @@ import {
   indexStats,
   loadChunks,
   noteForIndex,
-  saveChunks,
-  type StoredChunk
-} from './store'
+  saveChunks
+} from './silo'
+import type { StoredChunk } from '../silo/api'
 
 // Semantic search over notes: each note is split into passages of about a thousand
 // characters (transcript by time, notes and generated notes by paragraph), embedded once
@@ -29,10 +29,25 @@ let notify: (s: SemanticStatus) => void = () => {}
 const dirty = new Map<string, number>()
 let indexing = false
 let cache: StoredChunk[] | null = null
+/** Counts changes to the saved passages, so a load that one of them overtook isn't kept. */
+let changes = 0
 
 function publish(patch: Partial<SemanticStatus> = {}) {
-  status = { ...status, ...indexStats(), ...patch }
+  status = { ...status, ...patch }
   notify(status)
+  refreshStats()
+}
+
+/** New and deleted notes change the count shown in Settings. */
+async function refreshStats() {
+  try {
+    const stats = await indexStats()
+    if (stats.indexed === status.indexed && stats.total === status.total) return
+    status = { ...status, ...stats }
+    notify(status)
+  } catch (err) {
+    console.error('Failed to count indexed notes', err)
+  }
 }
 
 export const semanticStatus = () => status
@@ -42,7 +57,7 @@ export async function initSemantic(onStatus: (s: SemanticStatus) => void) {
   if (!runtimeAvailable()) return publish({ model: 'unavailable' })
   publish({ model: modelReady() ? 'ready' : 'missing' })
   // Picks up notes changed by an older version, or before the model was downloaded.
-  for (const id of allNoteIds()) dirty.set(id, 0)
+  for (const id of await allNoteIds()) dirty.set(id, 0)
   setInterval(tick, TICK_MS).unref()
   tick()
 }
@@ -66,9 +81,10 @@ export async function downloadSemanticModel() {
 
 export async function removeSemanticModel() {
   await removeModel()
-  clearChunks()
+  await clearChunks()
+  changes++
   cache = null
-  for (const id of allNoteIds()) dirty.set(id, 0)
+  for (const id of await allNoteIds()) dirty.set(id, 0)
   publish({ model: 'missing' })
 }
 
@@ -90,11 +106,12 @@ export function touchNotes(ids: string[]) {
 
 export function forgetNote(id: string) {
   dirty.delete(id)
+  changes++
   if (cache) cache = cache.filter((c) => c.noteId !== id)
 }
 
-function passages(noteId: string): { title: string; parts: Passage[] } | null {
-  const note = noteForIndex(noteId)
+async function passages(noteId: string): Promise<{ title: string; parts: Passage[] } | null> {
+  const note = await noteForIndex(noteId)
   if (!note) return null
   const out: Passage[] = []
 
@@ -140,23 +157,22 @@ function passages(noteId: string): { title: string; parts: Passage[] } | null {
 }
 
 async function indexNote(id: string) {
-  const note = passages(id)
+  const note = await passages(id)
   if (!note) return
   const hash = createHash('sha1')
     .update(EMBEDDING_MODEL + JSON.stringify(note))
     .digest('hex')
-  if (chunkHash(id) === hash) return
+  if ((await chunkHash(id)) === hash) return
   // The title goes into every passage for embedding, so a passage keeps its context.
   const vectors = await embed(note.parts.map((p) => `passage: ${note.title}\n${p.text}`))
   const chunks: StoredChunk[] = note.parts.map((p, i) => ({ ...p, noteId: id, vector: vectors[i] }))
-  saveChunks(id, hash, chunks)
+  await saveChunks(id, hash, chunks)
+  changes++
   if (cache) cache = [...cache.filter((c) => c.noteId !== id), ...chunks]
 }
 
 async function tick() {
-  // New and deleted notes change the count shown in Settings.
-  const stats = indexStats()
-  if (stats.indexed !== status.indexed || stats.total !== status.total) publish()
+  await refreshStats()
   if (indexing || status.model !== 'ready') return
   indexing = true
   try {
@@ -193,10 +209,15 @@ export async function semanticSearch(query: string, noteIds?: string[], limit = 
     if (err instanceof EmbedError && err.fatal) giveUp(err)
     throw err
   }
-  cache ??= loadChunks()
+  let chunks = cache
+  if (!chunks) {
+    const before = changes
+    chunks = await loadChunks()
+    if (before === changes) cache = chunks
+  }
   const only = noteIds && new Set(noteIds)
   const scored: SemanticHit[] = []
-  for (const c of cache) {
+  for (const c of chunks) {
     if (only && !only.has(c.noteId)) continue
     let score = 0
     for (let j = 0; j < q.length; j++) score += q[j] * c.vector[j]

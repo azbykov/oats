@@ -8,6 +8,10 @@ directories:
 # Builds are attached to CI runs, not published; without this electron-builder
 # infers a GitHub release target from the git remote and tries to upload on tags.
 publish: null
+# Every native addon comes prebuilt (N-API), so there is nothing to compile for Electron.
+# Without this electron-builder rebuilds better-sqlite3-multiple-ciphers from source,
+# because it ships a binding.gyp next to its prebuilt binaries.
+npmRebuild: false
 # Each platform lists its files in full (a platform `files` replaces this one): the
 # app itself, minus whisper.cpp's CUDA (~125 MB) and WASM builds (Vulkan covers
 # NVIDIA too) and the other platform's addons, which a cross-build has installed.
@@ -16,6 +20,8 @@ files:
   - package.json
   - "!**/node_modules/@fugood/node-whisper-*-cuda/**"
   - "!**/node_modules/@fugood/node-whisper-wasm/**"
+  - "!**/node_modules/better-sqlite3-multiple-ciphers/{deps,src}/**"
+  - "!**/node_modules/better-sqlite3-multiple-ciphers/prebuilds/linux*"
 # Native addons and the DLLs/dylibs next to them must be real files on disk.
 # oats:// links open the app; the browser tab that finishes a sign-in uses one.
 protocols:
@@ -25,6 +31,7 @@ asarUnpack:
   - "**/node_modules/sherpa-onnx-*/**"
   - "**/node_modules/@fugood/node-whisper-*/**"
   - "**/node_modules/onnxruntime-node/bin/**"
+  - "**/node_modules/better-sqlite3-multiple-ciphers/prebuilds/**"
 mac:
   target: dir
   files:
@@ -34,6 +41,9 @@ mac:
     - "!**/node_modules/@fugood/node-whisper-wasm/**"
     - "!**/node_modules/sherpa-onnx-win-*/**"
     - "!**/node_modules/@fugood/node-whisper-win32-*/**"
+    # The encrypted database (better-sqlite3-multiple-ciphers): source and other systems' builds stay out.
+    - "!**/node_modules/better-sqlite3-multiple-ciphers/{deps,src}/**"
+    - "!**/node_modules/better-sqlite3-multiple-ciphers/prebuilds/{linux,win32}*"
     # Semantic search (onnxruntime-node): macOS arm64 only; the binding loads libonnxruntime.1.dylib.
     - "!**/node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}/**"
     - "!**/node_modules/onnxruntime-node/bin/napi-v6/darwin/*/libonnxruntime.1.*.*.dylib"
@@ -61,6 +71,9 @@ win:
     - "!**/node_modules/@fugood/node-whisper-wasm/**"
     - "!**/node_modules/sherpa-onnx-darwin-*/**"
     - "!**/node_modules/@fugood/node-whisper-darwin-*/**"
+    - "!**/node_modules/better-sqlite3-multiple-ciphers/{deps,src}/**"
+    - "!**/node_modules/better-sqlite3-multiple-ciphers/prebuilds/{linux,darwin}*"
+    - "!**/node_modules/better-sqlite3-multiple-ciphers/prebuilds/win32-arm64.node"
     - "!**/node_modules/onnxruntime-node/bin/napi-v6/{linux,darwin,win32/arm64}/**"
   target:
     - target: nsis

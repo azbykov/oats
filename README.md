@@ -162,12 +162,19 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 
 ## Как устроено
 
-- `src/main` — Electron main: окно, хранилище SQLite (`~/Library/Application Support/Oats/oats.db`, встроенный
-  `node:sqlite`, WAL; строки транскрипта — отдельные записи, поиск — FTS5 с trigram; старый `oats-data.json`
-  переносится при первом запуске и остаётся как `oats-data.json.bak`),
+- `src/main` — Electron main: окно, клиент хранилища (`silo.ts`: запросы к процессу базы и копия настроек),
   вызовы Claude / OpenAI (`ai.ts`), парсер ICS (`ics.ts`), обработчик системного звука; вход через Google / Яндекс
   (`oauth.ts`, `accounts.ts`) и их календари (`google.ts`, `yandex.ts`, сводит всё `calendar.ts`); Notion
   (`integrations.ts`, `notion.ts`).
+- `src/silo` — silo, отдельный процесс базы (`utilityProcess`, в сборке `oats-silo.js`): только он открывает SQLite
+  (`~/Library/Application Support/Oats/oats.db`, WAL; строки транскрипта — отдельные записи, поиск — FTS5 с trigram;
+  старый `oats-data.json` переносится при первом запуске и остаётся как `oats-data.json.bak`). База зашифрована
+  целиком (SQLCipher, [`better-sqlite3-multiple-ciphers`](https://github.com/m4heshd/better-sqlite3-multiple-ciphers),
+  MIT): ключ — 32 случайных байта в `oats.key`, запечатанном связкой ключей ОС, поэтому на другом компьютере или под
+  другим пользователем база не откроется. Открытая база от старой версии шифруется при первом запуске; оригинал
+  остаётся рядом как `oats-unencrypted.db.bak` и удаляется через 14 дней. Main-процесс шлёт silo запросы (`api.ts`) и
+  ждёт его при выходе. Базу, которая не открылась, silo не трогает: приложение показывает ошибку и закрывается.
+  Аудио сессий (`recordings/*.wav`) пока не шифруется.
 - `src/preload` — мост `window.oats`.
 - `src/sidecar` — тот же CLI `oats-audio` на Node (Windows, Intel Mac): `listen` / `transcribe` / `prepare-asr` на
   whisper.cpp ([`@fugood/whisper.node`](https://github.com/mybigday/whisper.node), MIT; ggml-модели в

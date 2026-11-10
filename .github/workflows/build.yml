@@ -53,7 +53,7 @@ jobs:
 
       - run: npm run typecheck
 
-      # Unit tests (vitest) run in every job: the store uses node:sqlite and real files, and
+      # Unit tests (vitest) run in every job: the store uses a native SQLite build and real files, and
       # the calendar tests depend on the platform's time zone data.
       - run: npm test
 
@@ -86,6 +86,10 @@ jobs:
       # Semantic search's ONNX runtime, and the VC++ runtime DLLs it needs shipped beside it.
       - name: Smoke-test embedding runtime
         run: node scripts/smoke-embedder.mjs dist/win-unpacked
+
+      # The encrypted database's native binary: without it Oats can't open anyone's notes.
+      - name: Smoke-test encrypted database
+        run: node scripts/smoke-silo.mjs dist/win-unpacked
 
   macos:
     if: ${{ !(github.event_name == 'push' && github.ref_type == 'branch' && startsWith(github.event.head_commit.message, 'Version ')) }}
@@ -133,6 +137,9 @@ jobs:
 
       - name: Smoke-test embedding runtime
         run: node scripts/smoke-embedder.mjs dist/mac-arm64/Oats.app
+
+      - name: Smoke-test encrypted database
+        run: node scripts/smoke-silo.mjs dist/mac-arm64/Oats.app
 
       # ditto keeps the framework symlinks and signature that a plain artifact upload would break.
       - name: Zip Oats.app
@@ -189,6 +196,9 @@ jobs:
 
       - name: Smoke-test audio sidecar
         run: node scripts/smoke-sidecar.mjs dist/mac/Oats.app "$RUNNER_TEMP/speech.wav"
+
+      - name: Smoke-test encrypted database
+        run: node scripts/smoke-silo.mjs dist/mac/Oats.app
 
       # ditto keeps the framework symlinks and signature that a plain artifact upload would break.
       - name: Zip Oats.app

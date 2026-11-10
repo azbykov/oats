@@ -6,3 +6,4 @@ mac:
   files:
     - "!**/node_modules/sherpa-onnx-darwin-arm64/**"
     - "!**/node_modules/@fugood/node-whisper-darwin-arm64/**"
+    - "!**/node_modules/better-sqlite3-multiple-ciphers/prebuilds/darwin-arm64.node"

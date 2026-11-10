@@ -25,6 +25,7 @@ import type {
   PermissionKind,
   PillAction,
   RecordingMeta,
+  Settings,
   Theme
 } from '../shared/types'
 import {
@@ -56,7 +57,16 @@ import { openPermissionSettings, permissionStatus, requestPermission } from './p
 import { closeMeetingPill, initMeetingPill, showMeetingPill } from './pill'
 import * as recordings from './recordings'
 import { audioHelper } from './sidecar'
-import { applyOps, closeStore, loadData, searchNotes, state as data, unlockSecrets, updateSettings } from './store'
+import {
+  applyOps,
+  closeSilo,
+  loadData,
+  searchNotes,
+  startSilo,
+  state as data,
+  unlockSecrets,
+  updateSettings
+} from './silo'
 import {
   downloadSemanticModel,
   forgetNote,
@@ -102,9 +112,6 @@ let win: BrowserWindow | null = null
 // Packaged apps take their icon from the bundle / exe; in dev Electron would show its own,
 // so set a violet variant that also tells a dev run apart from the installed app.
 const devIcon = app.isPackaged ? undefined : join(app.getAppPath(), 'resources/icon-dev.png')
-loadData()
-if (asr.knownModel(data.settings.whisperModel) !== data.settings.whisperModel)
-  updateSettings({ whisperModel: asr.knownModel(data.settings.whisperModel) })
 
 // Core Audio Tap (macOS 14.2+) captures system audio without screen recording:
 // only the "System Audio Recording" permission is needed and no video is captured.
@@ -215,7 +222,7 @@ function onPillAction(app: MeetingApp, action: PillAction) {
     // The renderer owns the data, so it records the change and saves it back.
     win.webContents.send('meeting:ignore', app)
   } else if (action.type === 'ignore-app') {
-    updateSettings({ ignoredMeetingApps: [...(data.settings.ignoredMeetingApps ?? []), app.bundleId] })
+    saveSettings({ ignoredMeetingApps: [...(data.settings.ignoredMeetingApps ?? []), app.bundleId] })
   }
 }
 
@@ -225,6 +232,11 @@ const meetingHandlers: MeetingHandlers = {
   // Also while Oats is in front: the window no longer has its own "call detected" banner.
   onDetected: (app) => showMeetingPill(app),
   onEnded: (app) => closeMeetingPill(app.bundleId)
+}
+
+/** A settings change made by the main process itself. */
+function saveSettings(patch: Partial<Settings>) {
+  updateSettings(patch).catch((err) => console.error('Failed to save settings', err))
 }
 
 function setupMenu() {
@@ -275,10 +287,10 @@ function setupMenu() {
 
 function setupIpc() {
   ipcMain.handle('data:load', () => loadData())
-  ipcMain.on('data:apply', (_e, ops: DataOp[]) => {
+  ipcMain.on('data:apply', async (_e, ops: DataOp[]) => {
     const before = data.settings
     try {
-      applyOps(ops)
+      await applyOps(ops)
     } catch (err) {
       console.error('Failed to save changes', err)
       return
@@ -393,9 +405,26 @@ function setupIpc() {
 }
 
 app.setName('Oats')
-app.whenReady().then(() => {
-  unlockSecrets()
+app.whenReady().then(async () => {
+  // A second copy is on its way out (above) and must not touch the database.
+  if (!locked || otherCopy) return
   if (devIcon) app.dock?.setIcon(devIcon)
+  try {
+    await startSilo()
+  } catch (err) {
+    console.error('Could not open the database', err)
+    dialog.showMessageBoxSync({
+      type: 'error',
+      message: 'Oats couldn’t open your notes',
+      detail: `${err instanceof Error ? err.message : String(err)}\n\nNothing was changed: the notes are still in ${join(app.getPath('userData'), 'oats.db')}.`
+    })
+    app.exit(1)
+    return
+  }
+  // API keys come out of the keychain before anything reads the settings.
+  await unlockSecrets().catch((err) => console.error('Could not unlock the saved API keys', err))
+  if (asr.knownModel(data.settings.whisperModel) !== data.settings.whisperModel)
+    saveSettings({ whisperModel: asr.knownModel(data.settings.whisperModel) })
   setupMedia()
   setupMenu()
   setupIpc()
@@ -408,6 +437,7 @@ app.whenReady().then(() => {
     onAction: onPillAction
   })
   createWindow()
+  started = true
   if (data.settings.transcriptionProvider === 'whisper') asr.prewarmModel(data.settings.whisperModel)
   setMeetingDetection(data.settings.detectMeetings, meetingHandlers)
   initSemantic((status) => {
@@ -422,7 +452,11 @@ app.whenReady().then(() => {
   })
 })
 
-const showMainWindow = () => withMainWindow(() => {})
+// Until the database is open there is nothing to show; the window opens by itself once it is.
+let started = false
+const showMainWindow = () => {
+  if (started) withMainWindow(() => {})
+}
 app.on('second-instance', showMainWindow)
 app.on('open-url', (e) => {
   e.preventDefault()
@@ -430,11 +464,16 @@ app.on('open-url', (e) => {
   if (app.isReady()) showMainWindow()
 })
 
-app.on('before-quit', () => {
-  closeStore()
+// Quitting waits for the silo to save what it was sent and close the database.
+let quitting = false
+app.on('before-quit', (e) => {
+  if (quitting) return
+  quitting = true
+  e.preventDefault()
   recordings.closeAll()
   setMeetingDetection(false, meetingHandlers)
   asr.stopListener()
+  closeSilo().finally(() => app.quit())
 })
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

@@ -1,7 +1,6 @@
-import { app, safeStorage } from 'electron'
-import { existsSync, readFileSync, renameSync } from 'node:fs'
+import Database from 'better-sqlite3-multiple-ciphers'
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import { BUILT_IN_RECIPES, BUILT_IN_TEMPLATES, DEFAULT_SETTINGS } from '../shared/defaults'
 import type {
   AppData,
@@ -15,16 +14,24 @@ import type {
   Template,
   TranscriptSegment
 } from '../shared/types'
-import { seal, unseal } from './sealed'
+import { withoutSecrets, type SiloApi, type StoredChunk } from './api'
 
-// SQLite (Node's built-in node:sqlite, so there is no native module to rebuild) in WAL mode.
+// The database itself, run inside the silo process (index.ts) and nowhere else.
+// SQLite in WAL mode, encrypted as a whole with SQLCipher (better-sqlite3-multiple-ciphers):
+// the file, its write-ahead log and the search indexes hold no readable text. The key comes
+// from the main process, which keeps it in the OS keychain.
 // The renderer keeps the data in memory and sends each change as a DataOp; transcript lines
 // are rows of their own, so live transcription appends one row instead of rewriting a file.
 // FTS5 trigram indexes back full-text search in any language.
 
-const dir = () => app.getPath('userData')
-const dbFile = () => join(dir(), 'oats.db')
-const legacyFile = () => join(dir(), 'oats-data.json')
+let dir = ''
+/** 64 hex digits, or null on a computer without a keychain: the database is then left unencrypted. */
+let key: string | null = null
+const dbFile = () => join(dir, 'oats.db')
+/** The database as it was before it was encrypted; removed BACKUP_DAYS later. */
+const backupFile = () => join(dir, 'oats-unencrypted.db.bak')
+const BACKUP_DAYS = 14
+const legacyFile = () => join(dir, 'oats-data.json')
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -148,21 +155,148 @@ CREATE TRIGGER IF NOT EXISTS segments_fts_delete AFTER DELETE ON transcript_segm
 END;
 `
 
-let db: DatabaseSync | undefined
+type Db = Database.Database
+let db: Db | undefined
 
-/** What the main process itself reads: settings and the full template list. */
-export const state: { settings: Settings; templates: Template[] } = {
-  settings: { ...DEFAULT_SETTINGS },
-  templates: BUILT_IN_TEMPLATES
+/**
+ * Opens the database in the given userData folder. A file that can't be opened is left
+ * exactly as it is and the error goes back to the main process: this is the only copy of
+ * the notes, so nothing here ever deletes or recreates it.
+ */
+function openStore(userData: string, withKey: string | null) {
+  if (withKey !== null && !/^[0-9a-f]{64}$/.test(withKey)) throw new Error('The database key is not valid.')
+  closeStore()
+  dir = userData
+  key = withKey
+  open()
+}
+
+/** A connection to `file`, unlocked with `k`. Throws before writing anything if that isn't possible. */
+function connect(file: string, k: string | null) {
+  const d = new Database(file)
+  try {
+    if (k) {
+      // SQLCipher 4's format, so the file can also be opened with the sqlcipher tools.
+      d.pragma("cipher = 'sqlcipher'")
+      d.pragma('legacy = 4')
+      d.pragma(`key = "x'${k}'"`)
+    }
+    // The first read: fails on a wrong key, a missing key or a file that isn't a database.
+    d.prepare('SELECT count(*) FROM sqlite_master').get()
+    return d
+  } catch (err) {
+    d.close()
+    throw err
+  }
+}
+
+/** Whether `file` is a database that isn't encrypted (those start with a fixed header). */
+function isPlain(file: string) {
+  const head = Buffer.alloc(16)
+  const fd = openSync(file, 'r')
+  try {
+    readSync(fd, head, 0, 16, 0)
+  } finally {
+    closeSync(fd)
+  }
+  return head.toString('latin1') === 'SQLite format 3\0'
+}
+
+const rowCounts = (d: Db) =>
+  (d.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[])
+    .map(({ name }) => `${name}=${(d.prepare(`SELECT count(*) AS n FROM "${name}"`).get() as { n: number }).n}`)
+    .join(' ')
+
+/**
+ * One-time move of a database from before encryption. An encrypted copy is made and checked
+ * against the original; only then does it take the original's place. The original is never
+ * rewritten or deleted here: it is renamed to oats-unencrypted.db.bak.
+ */
+function encrypt(file: string, k: string) {
+  const copy = `${file}.encrypting`
+  rmSync(copy, { force: true })
+  const plain = connect(file, null)
+  let before: string
+  try {
+    // What is still in the write-ahead log goes into the file first.
+    plain.pragma('wal_checkpoint(TRUNCATE)')
+    before = rowCounts(plain)
+    // Copies the pages into a new file; the original is only read.
+    plain.exec(`VACUUM INTO '${copy.replace(/'/g, "''")}'`)
+  } finally {
+    plain.close()
+  }
+  // Closing the last connection removes the log. One that is still there belongs to another
+  // connection, whose changes the copy may have missed.
+  if (existsSync(`${file}-wal`) && statSync(`${file}-wal`).size > 0) {
+    rmSync(copy, { force: true })
+    throw new Error('The database is in use, so it could not be encrypted.')
+  }
+  const sealing = connect(copy, null)
+  try {
+    sealing.pragma("cipher = 'sqlcipher'")
+    sealing.pragma('legacy = 4')
+    sealing.pragma(`rekey = "x'${k}'"`)
+  } finally {
+    sealing.close()
+  }
+
+  const check = connect(copy, k)
+  try {
+    const integrity = check.pragma('integrity_check', { simple: true })
+    if (integrity !== 'ok') throw new Error(`The encrypted copy of the database is damaged (${integrity}).`)
+    if (rowCounts(check) !== before) throw new Error('The encrypted copy of the database is incomplete.')
+  } catch (err) {
+    check.close()
+    rmSync(copy, { force: true })
+    throw err
+  }
+  check.close()
+  const fd = openSync(copy, 'r+')
+  try {
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+
+  rmSync(backupFile(), { force: true })
+  renameSync(file, backupFile())
+  renameSync(copy, file)
+  for (const suffix of ['-wal', '-shm']) rmSync(file + suffix, { force: true })
 }
 
 function open() {
   if (db) return db
-  db = new DatabaseSync(dbFile())
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;')
-  db.exec(SCHEMA)
-  importLegacyJson(db)
-  return db
+  if (!dir) throw new Error('The database was not opened.')
+  const file = dbFile()
+  // Stopped between the two renames at the end of encrypt(): put the original back and start over.
+  if (!existsSync(file) && existsSync(backupFile()) && existsSync(`${file}.encrypting`)) renameSync(backupFile(), file)
+  let encrypted: string | undefined
+  if (key && existsSync(file) && statSync(file).size > 0 && isPlain(file)) {
+    encrypt(file, key)
+    encrypted = new Date().toISOString()
+  }
+  const d = connect(file, key)
+  try {
+    d.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;')
+    d.exec(SCHEMA)
+    db = d
+    if (encrypted) putMeta('encrypted-at', encrypted)
+    importLegacyJson(d)
+    dropOldBackup(d)
+  } catch (err) {
+    db = undefined
+    d.close()
+    throw err
+  }
+  return d
+}
+
+/** The unencrypted backup is a safety net for the first BACKUP_DAYS days, then it goes. */
+function dropOldBackup(d: Db) {
+  if (!existsSync(backupFile())) return
+  const row = d.prepare("SELECT value FROM meta WHERE key = 'encrypted-at'").get() as { value: string } | undefined
+  if (row && Date.now() - Date.parse(row.value) > BACKUP_DAYS * 24 * 3600_000) rmSync(backupFile(), { force: true })
 }
 
 function transaction(fn: () => void) {
@@ -177,9 +311,8 @@ function transaction(fn: () => void) {
   }
 }
 
-// node:sqlite binds neither undefined nor booleans.
-const val = (v: unknown): SQLInputValue =>
-  v === undefined || v === null ? null : typeof v === 'boolean' ? Number(v) : (v as SQLInputValue)
+// SQLite binds neither undefined nor booleans.
+const val = (v: unknown) => (v === undefined || v === null ? null : typeof v === 'boolean' ? Number(v) : v)
 const json = (v: unknown) => (v === undefined ? null : JSON.stringify(v))
 const parse = <T>(s: unknown, fallback: T): T => (typeof s === 'string' ? (JSON.parse(s) as T) : fallback)
 const htmlText = (html: string) =>
@@ -262,55 +395,22 @@ function putList(table: 'templates' | 'recipes', items: (Template | Recipe)[]) {
   items.filter((t) => !t.builtIn).forEach((t, i) => insert.run(t.id, i, JSON.stringify(t)))
 }
 
-// API keys are kept out of the settings JSON, in a `secrets` row encrypted with the OS
-// keychain (safeStorage). Windows can only decrypt once the app is ready, so settings load
-// without them and unlockSecrets() adds them; until then settings are saved as they were read.
-const SECRET_KEYS = ['anthropicApiKey', 'openaiApiKey', 'deepgramApiKey'] as const
-type Secrets = Pick<Settings, (typeof SECRET_KEYS)[number]>
-let secrets: Secrets | undefined
-
-const pickSecrets = (s: Partial<Settings>) =>
-  Object.fromEntries(SECRET_KEYS.map((k) => [k, s[k] ?? ''])) as Secrets
-const withoutSecrets = (s: Settings) =>
-  Object.fromEntries(Object.entries(s).filter(([k]) => !(SECRET_KEYS as readonly string[]).includes(k)))
-
 function putMeta(key: string, value: string) {
   open()
     .prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value')
     .run(key, value)
 }
 
-function putSettings(settings: Settings) {
-  if (secrets) {
-    secrets = pickSecrets(settings)
-    putMeta('secrets', seal(secrets))
-    putMeta('settings', JSON.stringify(withoutSecrets(settings)))
-  } else putMeta('settings', JSON.stringify(settings))
-  state.settings = settings
+// API keys are kept out of the settings JSON, in a `secrets` row the main process encrypts
+// with the OS keychain (main/silo.ts). With `sealed` the keys are saved there and left out
+// of the JSON; without it (no keychain yet, or none at all) the settings are saved whole.
+function putSettings(settings: Settings, sealed?: string) {
+  if (sealed === undefined) return putMeta('settings', JSON.stringify(settings))
+  putMeta('secrets', sealed)
+  putMeta('settings', JSON.stringify(withoutSecrets(settings)))
 }
 
-/** Decrypts the API keys into the settings, moving any plaintext keys from older versions. Call once ready. */
-export function unlockSecrets() {
-  if (secrets || !safeStorage.isEncryptionAvailable()) return
-  const d = open()
-  const row = d.prepare("SELECT value FROM meta WHERE key = 'secrets'").get() as { value: string } | undefined
-  let stored: Secrets | undefined
-  if (row) {
-    try {
-      stored = pickSecrets(unseal<Partial<Secrets>>(row.value))
-    } catch (err) {
-      // Another keychain (a copied profile, a reset login keychain): the keys have to be entered again.
-      console.error('Could not decrypt the saved API keys', err)
-    }
-  }
-  const plaintext = !row && SECRET_KEYS.some((k) => state.settings[k])
-  secrets = stored ?? pickSecrets(state.settings)
-  transaction(() => putSettings({ ...state.settings, ...secrets }))
-  // Rebuild the file so the old plaintext keys don't linger in free pages or the WAL.
-  if (plaintext) d.exec('VACUUM; PRAGMA wal_checkpoint(TRUNCATE);')
-}
-
-function apply(op: DataOp) {
+function apply(op: DataOp, sealed?: string) {
   const d = open()
   switch (op.type) {
     case 'note':
@@ -328,33 +428,50 @@ function apply(op: DataOp) {
     case 'folders':
       return putFolders(op.folders)
     case 'templates':
-      putList('templates', op.templates)
-      state.templates = op.templates
-      return
+      return putList('templates', op.templates)
     case 'recipes':
       return putList('recipes', op.recipes)
     case 'settings':
-      return putSettings(op.settings)
+      return putSettings(op.settings, sealed)
   }
 }
 
-/** Saves a batch of changes from the renderer, all or nothing. */
-export function applyOps(ops: DataOp[]) {
-  transaction(() => ops.forEach(apply))
+/** Saves a batch of changes from the renderer, all or nothing. `sealed` goes with a settings change. */
+function applyOps(ops: DataOp[], sealed?: string) {
+  transaction(() => ops.forEach((op) => apply(op, sealed)))
 }
 
-export function updateSettings(patch: Partial<Settings>) {
-  transaction(() => putSettings({ ...state.settings, ...patch }))
+function saveSettings(settings: Settings, sealed?: string) {
+  transaction(() => putSettings(settings, sealed))
 }
 
-export function loadData(): AppData {
+/** The API keys as the main process sealed them, if it has. */
+const sealedSecrets = () =>
+  (open().prepare("SELECT value FROM meta WHERE key = 'secrets'").get() as { value: string } | undefined)?.value
+
+/** Rebuilds the file, so plaintext keys from an older version don't linger in free pages or the WAL. */
+function compact() {
+  open().exec('VACUUM; PRAGMA wal_checkpoint(TRUNCATE);')
+}
+
+/** Settings (without the sealed API keys) and the full template list: what the main process keeps a copy of. */
+function loadState() {
+  const d = open()
+  const settingsRow = d.prepare("SELECT value FROM meta WHERE key = 'settings'").get() as { value: string } | undefined
+  const userTemplates = (d.prepare('SELECT data FROM templates ORDER BY position').all() as { data: string }[]).map((r) =>
+    parse<Template>(r.data, null!)
+  )
+  return {
+    settings: { ...DEFAULT_SETTINGS, ...parse<Partial<Settings>>(settingsRow?.value, {}) } as Settings,
+    templates: [...BUILT_IN_TEMPLATES, ...userTemplates]
+  }
+}
+
+function loadData(): AppData {
   const d = open()
   const rows = (sql: string) => d.prepare(sql).all() as Record<string, unknown>[]
 
-  const settingsRow = d.prepare("SELECT value FROM meta WHERE key = 'settings'").get() as { value: string } | undefined
-  state.settings = { ...DEFAULT_SETTINGS, ...parse<Partial<Settings>>(settingsRow?.value, {}), ...secrets }
-  const userTemplates = rows('SELECT data FROM templates ORDER BY position').map((r) => parse<Template>(r.data, null!))
-  state.templates = [...BUILT_IN_TEMPLATES, ...userTemplates]
+  const state = loadState()
   const userRecipes = rows('SELECT data FROM recipes ORDER BY position').map((r) => parse<Recipe>(r.data, null!))
 
   const folderIds = new Map<string, string[]>()
@@ -429,7 +546,7 @@ export function loadData(): AppData {
 }
 
 /** Ids of notes whose title, notes, generated notes or transcript contain every word of `query`. */
-export function searchNotes(query: string): string[] {
+function searchNotes(query: string): string[] {
   // Trigram matching needs at least three characters per term; shorter ones are left to the caller.
   const words = query.trim().split(/\s+/).filter((w) => [...w].length >= 3)
   if (!words.length) return []
@@ -441,12 +558,12 @@ export function searchNotes(query: string): string[] {
     'SELECT p.note_id AS id FROM panels_fts f JOIN panels p ON p.seq = f.rowid WHERE panels_fts MATCH ? ORDER BY rank',
     'SELECT s.note_id AS id FROM segments_fts f JOIN transcript_segments s ON s.seq = f.rowid WHERE segments_fts MATCH ? ORDER BY rank'
   ]
-  for (const sql of queries) for (const r of d.prepare(sql).all(match)) ids.add(r.id as string)
+  for (const sql of queries) for (const r of d.prepare(sql).all(match) as { id: string }[]) ids.add(r.id)
   return [...ids]
 }
 
 /** What semantic search splits into passages: a note's text, generated notes and transcript. */
-export function noteForIndex(id: string) {
+function noteForIndex(id: string) {
   const d = open()
   const note = d.prepare('SELECT title, notes_markdown, speakers FROM notes WHERE id = ?').get(id) as
     | { title: string; notes_markdown: string; speakers: string | null }
@@ -465,27 +582,18 @@ export function noteForIndex(id: string) {
   }
 }
 
-export const allNoteIds = () => (open().prepare('SELECT id FROM notes').all() as { id: string }[]).map((r) => r.id)
+const allNoteIds = () => (open().prepare('SELECT id FROM notes').all() as { id: string }[]).map((r) => r.id)
 
-export function indexStats() {
+function indexStats() {
   const d = open()
   const count = (sql: string) => (d.prepare(sql).get() as { n: number }).n
   return { indexed: count('SELECT count(*) AS n FROM chunk_notes'), total: count('SELECT count(*) AS n FROM notes') }
 }
 
-export const chunkHash = (noteId: string) =>
+const chunkHash = (noteId: string) =>
   (open().prepare('SELECT hash FROM chunk_notes WHERE note_id = ?').get(noteId) as { hash: string } | undefined)?.hash
 
-export interface StoredChunk {
-  noteId: string
-  kind: 'notes' | 'panel' | 'transcript'
-  startMs?: number
-  endMs?: number
-  text: string
-  vector: Float32Array
-}
-
-export function saveChunks(noteId: string, hash: string, chunks: StoredChunk[]) {
+function saveChunks(noteId: string, hash: string, chunks: StoredChunk[]) {
   transaction(() => {
     const d = open()
     // The note may have been deleted while it was being embedded.
@@ -502,7 +610,7 @@ export function saveChunks(noteId: string, hash: string, chunks: StoredChunk[]) 
   })
 }
 
-export function loadChunks(): StoredChunk[] {
+function loadChunks(): StoredChunk[] {
   return (open().prepare('SELECT note_id, kind, start_ms, end_ms, text, vector FROM chunks').all() as Record<string, unknown>[]).map(
     (r) => {
       const bytes = r.vector as Uint8Array
@@ -513,19 +621,19 @@ export function loadChunks(): StoredChunk[] {
         ...(r.end_ms != null && { endMs: r.end_ms as number }),
         text: r.text as string,
         // A copy: the blob's bytes need not be aligned for a Float32Array view.
-        vector: new Float32Array(bytes.slice().buffer)
+        vector: new Float32Array(new Uint8Array(bytes).buffer)
       }
     }
   )
 }
 
 /** Drops every embedding, e.g. when the model is removed. */
-export function clearChunks() {
+function clearChunks() {
   open().exec('DELETE FROM chunks; DELETE FROM chunk_notes;')
 }
 
 /** One-time move from the JSON file Oats used before; the file is kept as oats-data.json.bak. */
-function importLegacyJson(d: DatabaseSync) {
+function importLegacyJson(d: Db) {
   if (d.prepare("SELECT 1 FROM meta WHERE key = 'imported-json'").get() || !existsSync(legacyFile())) return
   let legacy: Partial<AppData>
   try {
@@ -550,7 +658,27 @@ function importLegacyJson(d: DatabaseSync) {
   renameSync(legacyFile(), `${legacyFile()}.bak`)
 }
 
-export function closeStore() {
+function closeStore() {
   db?.close()
   db = undefined
+}
+
+/** Everything the main process can ask of the silo; index.ts answers each request with one of these. */
+export const api: SiloApi = {
+  open: openStore,
+  close: closeStore,
+  loadState,
+  loadData,
+  applyOps,
+  saveSettings,
+  sealedSecrets,
+  compact,
+  searchNotes,
+  noteForIndex,
+  allNoteIds,
+  indexStats,
+  chunkHash,
+  saveChunks,
+  loadChunks,
+  clearChunks
 }
