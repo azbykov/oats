@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import type { ChatMessage, CliStatus, Settings } from '../shared/types'
+import type { ChatMessage, CliModel, CliStatus, Settings } from '../shared/types'
 
 // Runs notes and chat through the user's own Claude Code or Codex CLI, so they bill to the
 // subscription the CLI is signed in with instead of an API key. Each request is one
@@ -201,6 +201,42 @@ async function runLines(
   } finally {
     signal.removeEventListener('abort', kill)
   }
+}
+
+/**
+ * The models Codex lists in its own picker, best first, from `codex debug models` (its
+ * catalog, refreshed for the signed-in account). Empty when the CLI is missing or the
+ * command changes, and Settings falls back to typing the model name.
+ */
+export async function listCodexModels(): Promise<CliModel[]> {
+  const env = await cliEnv()
+  return new Promise((resolve) => {
+    const child = spawnCli('codex', ['debug', 'models'], env, tmpdir())
+    const timer = setTimeout(() => child.kill(), 15_000)
+    let out = ''
+    child.stdout.on('data', (chunk) => (out += chunk))
+    child.on('error', () => resolve([]))
+    child.on('close', () => {
+      clearTimeout(timer)
+      try {
+        const models = (JSON.parse(out).models ?? []) as {
+          slug: string
+          display_name?: string
+          description?: string
+          visibility?: string
+          priority?: number
+        }[]
+        resolve(
+          models
+            .filter((m) => m.slug && m.visibility === 'list')
+            .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+            .map((m) => ({ id: m.slug, name: m.display_name || m.slug, description: m.description ?? '' }))
+        )
+      } catch {
+        resolve([])
+      }
+    })
+  })
 }
 
 /** Whether the CLI is installed and signed in, for Settings → AI. */

@@ -133,6 +133,21 @@ textarea,
   user-select: text;
 }
 
+/* Our own chevron instead of the native one, which hugs the edge and ignores the theme.
+   Unlayered, so it wins over the px-* utilities on the right side only. */
+select {
+  appearance: none;
+  padding-right: 1.75rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e89' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 13px;
+  text-overflow: ellipsis;
+}
+select:disabled {
+  opacity: 0.5;
+}
+
 ::selection {
   background: var(--fill-accent-soft);
 }

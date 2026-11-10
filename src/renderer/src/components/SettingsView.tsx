@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { CliStatus, SemanticStatus, Settings, WhisperModel } from '../../../shared/types'
+import type { CliModel, CliStatus, SemanticStatus, Settings, WhisperModel } from '../../../shared/types'
 import { MicrophoneSelect } from './AudioSettings'
 import { SetupChecklist } from './Setup'
 import { isMac, thisComputer } from '../lib/platform'
@@ -266,14 +266,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                     >
                       <CliStatusLine kind="codex" />
                     </Row>
-                    <Row label="Model" hint="Leave empty to use the Codex default.">
-                      <input
-                        className={input}
-                        value={settings.codexModel}
-                        onChange={(e) => set('codexModel')(e.target.value.trim())}
-                        placeholder="Codex default"
-                      />
-                    </Row>
+                    <CodexModelSelect value={settings.codexModel} onChange={set('codexModel')} />
                   </>
                 )}
                 <Row
@@ -644,6 +637,39 @@ function CliStatusLine({ kind }: { kind: 'claude' | 'codex' }) {
         Check again
       </Button>
     </div>
+  )
+}
+
+/** Codex's own model list; typing the name stays as a fallback when the CLI can't list them. */
+function CodexModelSelect({ value, onChange }: { value: string; onChange: (model: string) => void }) {
+  const [models, setModels] = useState<CliModel[] | null>(null)
+  useEffect(() => {
+    window.oats.listCodexModels().then(setModels)
+  }, [])
+  const chosen = models?.find((m) => m.id === value)
+  if (models && !models.length)
+    return (
+      <Row label="Model" hint="Leave empty to use the Codex default.">
+        <input
+          className={input}
+          value={value}
+          onChange={(e) => onChange(e.target.value.trim())}
+          placeholder="Codex default"
+        />
+      </Row>
+    )
+  return (
+    <Row label="Model" hint={chosen?.description || 'The model Codex picks by default, or the one set in its config.'}>
+      <select className={input} value={value} disabled={!models} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{models ? 'Codex default' : 'Loading models…'}</option>
+        {models?.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+        {value && models && !chosen && <option value={value}>{value}</option>}
+      </select>
+    </Row>
   )
 }
 

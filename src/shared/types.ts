@@ -276,6 +276,13 @@ export type AiProvider = 'anthropic' | 'openai' | 'claude-cli' | 'codex-cli'
 
 export type CliStatus = { ok: true; detail: string } | { ok: false; message: string }
 
+/** A model the Codex CLI offers in its own picker. */
+export interface CliModel {
+  id: string
+  name: string
+  description: string
+}
+
 export interface Settings {
   aiProvider: AiProvider
   anthropicApiKey: string

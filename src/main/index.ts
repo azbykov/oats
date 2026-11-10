@@ -36,7 +36,7 @@ import {
   setCalendarEnabled
 } from './accounts'
 import { abort, chat, enhance, listOpenAIModels } from './ai'
-import { cliStatus, type CliKind } from './ai-cli'
+import { cliStatus, listCodexModels, type CliKind } from './ai-cli'
 import * as asr from './asr'
 import { fetchCalendar } from './calendar'
 import {
@@ -315,6 +315,7 @@ function setupIpc() {
   ipcMain.on('ai:abort', (_e, id: string) => abort(id))
   ipcMain.handle('ai:openai-models', () => listOpenAIModels(data.settings.openaiApiKey).catch(() => []))
   ipcMain.handle('ai:cli-status', (_e, kind: CliKind) => cliStatus(kind))
+  ipcMain.handle('ai:codex-models', () => listCodexModels())
 
   ipcMain.handle('asr:models', () => asr.listModels())
   ipcMain.on('asr:prepare', (_e, id: string) => asr.prepareModel(id))
