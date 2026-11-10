@@ -53,6 +53,10 @@ jobs:
 
       - run: npm run typecheck
 
+      # Unit tests (vitest) run in every job: the store uses node:sqlite and real files, and
+      # the calendar tests depend on the platform's time zone data.
+      - run: npm test
+
       - name: Build installer
         run: npm run dist:win
 
@@ -102,6 +106,8 @@ jobs:
       - run: npm ci
 
       - run: npm run typecheck
+
+      - run: npm test
 
       # WhisperKit and FluidAudio take several minutes to compile from scratch.
       - name: Cache Swift build
@@ -157,6 +163,8 @@ jobs:
       - run: npm ci
 
       - run: npm run typecheck
+
+      - run: npm test
 
       # Builds the universal TCC addon, packages Oats.app for x64 and signs it ad hoc.
       - name: Build Oats.app
