@@ -56,7 +56,7 @@ import { openPermissionSettings, permissionStatus, requestPermission } from './p
 import { closeMeetingPill, initMeetingPill, showMeetingPill } from './pill'
 import * as recordings from './recordings'
 import { audioHelper } from './sidecar'
-import { applyOps, closeStore, loadData, searchNotes, state as data, updateSettings } from './store'
+import { applyOps, closeStore, loadData, searchNotes, state as data, unlockSecrets, updateSettings } from './store'
 import {
   downloadSemanticModel,
   forgetNote,
@@ -393,6 +393,7 @@ function setupIpc() {
 
 app.setName('Oats')
 app.whenReady().then(() => {
+  unlockSecrets()
   if (devIcon) app.dock?.setIcon(devIcon)
   setupMedia()
   setupMenu()

@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, safeStorage } from 'electron'
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
@@ -15,6 +15,7 @@ import type {
   Template,
   TranscriptSegment
 } from '../shared/types'
+import { seal, unseal } from './sealed'
 
 // SQLite (Node's built-in node:sqlite, so there is no native module to rebuild) in WAL mode.
 // The renderer keeps the data in memory and sends each change as a DataOp; transcript lines
@@ -261,11 +262,52 @@ function putList(table: 'templates' | 'recipes', items: (Template | Recipe)[]) {
   items.filter((t) => !t.builtIn).forEach((t, i) => insert.run(t.id, i, JSON.stringify(t)))
 }
 
-function putSettings(settings: Settings) {
+// API keys are kept out of the settings JSON, in a `secrets` row encrypted with the OS
+// keychain (safeStorage). Windows can only decrypt once the app is ready, so settings load
+// without them and unlockSecrets() adds them; until then settings are saved as they were read.
+const SECRET_KEYS = ['anthropicApiKey', 'openaiApiKey', 'deepgramApiKey'] as const
+type Secrets = Pick<Settings, (typeof SECRET_KEYS)[number]>
+let secrets: Secrets | undefined
+
+const pickSecrets = (s: Partial<Settings>) =>
+  Object.fromEntries(SECRET_KEYS.map((k) => [k, s[k] ?? ''])) as Secrets
+const withoutSecrets = (s: Settings) =>
+  Object.fromEntries(Object.entries(s).filter(([k]) => !(SECRET_KEYS as readonly string[]).includes(k)))
+
+function putMeta(key: string, value: string) {
   open()
     .prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value')
-    .run('settings', JSON.stringify(settings))
+    .run(key, value)
+}
+
+function putSettings(settings: Settings) {
+  if (secrets) {
+    secrets = pickSecrets(settings)
+    putMeta('secrets', seal(secrets))
+    putMeta('settings', JSON.stringify(withoutSecrets(settings)))
+  } else putMeta('settings', JSON.stringify(settings))
   state.settings = settings
+}
+
+/** Decrypts the API keys into the settings, moving any plaintext keys from older versions. Call once ready. */
+export function unlockSecrets() {
+  if (secrets || !safeStorage.isEncryptionAvailable()) return
+  const d = open()
+  const row = d.prepare("SELECT value FROM meta WHERE key = 'secrets'").get() as { value: string } | undefined
+  let stored: Secrets | undefined
+  if (row) {
+    try {
+      stored = pickSecrets(unseal<Partial<Secrets>>(row.value))
+    } catch (err) {
+      // Another keychain (a copied profile, a reset login keychain): the keys have to be entered again.
+      console.error('Could not decrypt the saved API keys', err)
+    }
+  }
+  const plaintext = !row && SECRET_KEYS.some((k) => state.settings[k])
+  secrets = stored ?? pickSecrets(state.settings)
+  transaction(() => putSettings({ ...state.settings, ...secrets }))
+  // Rebuild the file so the old plaintext keys don't linger in free pages or the WAL.
+  if (plaintext) d.exec('VACUUM; PRAGMA wal_checkpoint(TRUNCATE);')
 }
 
 function apply(op: DataOp) {
@@ -310,7 +352,7 @@ export function loadData(): AppData {
   const rows = (sql: string) => d.prepare(sql).all() as Record<string, unknown>[]
 
   const settingsRow = d.prepare("SELECT value FROM meta WHERE key = 'settings'").get() as { value: string } | undefined
-  state.settings = { ...DEFAULT_SETTINGS, ...parse<Partial<Settings>>(settingsRow?.value, {}) }
+  state.settings = { ...DEFAULT_SETTINGS, ...parse<Partial<Settings>>(settingsRow?.value, {}), ...secrets }
   const userTemplates = rows('SELECT data FROM templates ORDER BY position').map((r) => parse<Template>(r.data, null!))
   state.templates = [...BUILT_IN_TEMPLATES, ...userTemplates]
   const userRecipes = rows('SELECT data FROM recipes ORDER BY position').map((r) => parse<Recipe>(r.data, null!))
