@@ -158,7 +158,7 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 | Редактирование | Удаление строк транскрипта, вставка без форматирования ⌘⇧V, предупреждение перед удалением правленого конспекта |
 | Focus mode | ⌘⇧F: без сайдбара, шапка появляется при наведении; Esc — выход |
 | Папки, поиск ⌘K, тёмная тема | Есть; экспорт в Markdown, копирование |
-| Save to Notion | **Settings → Integrations**: подключение через сайт Oats, база «Oats Notes»; открытая вкладка заметки уходит на свою страницу (Markdown API Notion), повторное сохранение её обновляет — см. [docs/notion.md](docs/notion.md) |
+| Save to Notion | **Settings → Integrations**: подключение через сайт Oats, база «Oats Notes»; открытая вкладка заметки уходит на свою страницу (Markdown API Notion), повторное сохранение её обновляет |
 
 ## Как устроено
 
