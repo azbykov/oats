@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { UpdateState } from '../../../common/types'
 import { useStore } from '../lib/store'
 import { Button, IconButton } from './ui'
+import { product } from '../lib/product'
 
 /** "A new version is available" at the bottom of the sidebar, once per version per launch. */
 export function UpdateCard() {
@@ -22,7 +23,9 @@ export function UpdateCard() {
       <div className="flex items-start gap-2.5">
         <ArrowDownToLine size={15} className="mt-0.5 shrink-0 text-ink-accent" />
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium text-ink-strong">Oats {update.version}</div>
+          <div className="text-[13px] font-medium text-ink-strong">
+            {product.name} {update.version}
+          </div>
           <div className="text-[12px] leading-snug text-ink-tertiary">
             {!ready
               ? 'A new version is available.'

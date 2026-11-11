@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* The classes are in the components next to this file, wherever the app that builds it lives. */
+@source './';
 
 @custom-variant dark (&:where(.dark, .dark *));
 

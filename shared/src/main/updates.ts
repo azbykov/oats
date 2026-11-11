@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, net, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateState } from '../common/types'
+import { product } from './product'
 
 // New releases come from the site that serves the landing's downloads (oats-site,
 // /download/*, filled by CI on release tags; see scripts/publish-r2.sh).
@@ -96,7 +97,7 @@ async function runManualCheck(parent?: BrowserWindow) {
     return
   }
   if (state?.status === 'ready') {
-    await say(`Oats ${state.version} is ready to install.`, 'Use "Restart to update" in the sidebar, or quit Oats to install it.')
+    await say(`${product.name} ${state.version} is ready to install.`, `Use "Restart to update" in the sidebar, or quit ${product.name} to install it.`)
     return
   }
 
@@ -106,7 +107,7 @@ async function runManualCheck(parent?: BrowserWindow) {
       const result = await autoUpdater.checkForUpdates()
       version = result?.isUpdateAvailable ? result.updateInfo.version : null
       if (version) {
-        await say(`Oats ${version} is downloading.`, 'Oats will offer to restart once it is ready.')
+        await say(`${product.name} ${version} is downloading.`, `${product.name} will offer to restart once it is ready.`)
         return
       }
     } else {
@@ -119,10 +120,10 @@ async function runManualCheck(parent?: BrowserWindow) {
   }
 
   if (!version || state?.status !== 'available') {
-    await say("You're up to date.", `Oats ${current} is the latest version.`)
+    await say("You're up to date.", `${product.name} ${current} is the latest version.`)
     return
   }
   const { downloadUrl } = state
-  const { response } = await say(`Oats ${version} is available.`, `You have ${current}.`, ['Download', 'Later'])
+  const { response } = await say(`${product.name} ${version} is available.`, `You have ${current}.`, ['Download', 'Later'])
   if (response === 0) void shell.openExternal(downloadUrl)
 }

@@ -53,6 +53,7 @@ import {
 import { claimInstance, otherInstance } from './instance'
 import { activeMeetingApps, callMicInputs, followCallMic, setMeetingDetection, type MeetingHandlers } from './meetings'
 import { cancelAuthorization } from './oauth'
+import { product } from './product'
 import { openPermissionSettings, permissionStatus, requestPermission } from './permissions'
 import { closeMeetingPill, initMeetingPill, showMeetingPill } from './pill'
 import * as recordings from './recordings'
@@ -81,13 +82,13 @@ import { checkForUpdatesNow, installUpdate, startUpdateChecks, updateState } fro
 // Lets a second copy (or a test run) keep its data separate.
 if (process.env.OATS_USER_DATA) app.setPath('userData', process.env.OATS_USER_DATA)
 
-// oats:// links bring Oats to the front; the browser tab that finishes a sign-in
-// opens one (oauth.ts). An unpackaged run (npm run dev) registers Electron with
-// the app's path as its argument.
+// Links with the app's own scheme (oats://) bring it to the front; the browser tab that
+// finishes a sign-in opens one (oauth.ts). An unpackaged run (npm run dev) registers
+// Electron with the app's path as its argument.
 if (process.defaultApp) {
-  if (process.argv[1]) app.setAsDefaultProtocolClient('oats', process.execPath, [resolve(process.argv[1])])
+  if (process.argv[1]) app.setAsDefaultProtocolClient(product.protocol, process.execPath, [resolve(process.argv[1])])
 } else {
-  app.setAsDefaultProtocolClient('oats')
+  app.setAsDefaultProtocolClient(product.protocol)
 }
 // On Windows a link starts a second copy, which hands over to this one and quits.
 // The lock lives in userData, so OATS_USER_DATA copies still run side by side.
@@ -99,7 +100,7 @@ if (otherCopy) {
   app.whenReady().then(() => {
     dialog.showMessageBoxSync({
       type: 'warning',
-      message: 'Oats is already open',
+      message: `${product.name} is already open`,
       detail: `Another copy is running from ${otherCopy}. Quit it first: both copies would write the same notes.`
     })
     app.exit(0)
@@ -107,6 +108,8 @@ if (otherCopy) {
 } else if (locked) {
   claimInstance()
 }
+
+const { features } = product
 
 let win: BrowserWindow | null = null
 // Packaged apps take their icon from the bundle / exe; in dev Electron would show its own,
@@ -152,7 +155,7 @@ function createWindow() {
     minWidth: 760,
     minHeight: 520,
     show: false,
-    title: 'Oats',
+    title: product.name,
     icon: devIcon,
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 } }
@@ -362,6 +365,7 @@ function setupIpc() {
   ipcMain.handle('accounts:list', () => listAccounts())
   ipcMain.handle('accounts:providers', () => configuredProviders())
   ipcMain.handle('accounts:connect', (_e, provider: AccountProvider) => connectAccount(provider))
+  // Stops a sign-in in progress: an account's or Notion's.
   ipcMain.on('accounts:cancel', () => cancelAuthorization())
   ipcMain.handle('accounts:disconnect', (_e, id: string) => disconnectAccount(id))
   ipcMain.handle('accounts:app-password', (_e, id: string, password: string) => setAppPassword(id, password))
@@ -369,15 +373,17 @@ function setupIpc() {
     setCalendarEnabled(id, calendarId, enabled)
   )
 
-  ipcMain.handle('integrations:list', () => listIntegrations())
-  ipcMain.handle('integrations:providers', () => integrationProviders())
-  ipcMain.handle('integrations:disconnect', (_e, id: string) => disconnectIntegration(id))
-  // Cancelled like an account sign-in, with accounts:cancel.
-  ipcMain.handle('notion:connect', () => connectNotion())
-  ipcMain.handle('notion:parents', () => notionParents())
-  ipcMain.handle('notion:set-parent', (_e, pageId: string) => setNotionParent(pageId))
-  ipcMain.handle('notion:save', (_e, req: NotionSaveRequest) => saveToNotion(req))
-  ipcMain.handle('notion:page', (_e, noteId: string) => notionPage(noteId))
+  // What an app leaves out (Product.features) has no handlers at all; its window doesn't ask.
+  if (features.notion) {
+    ipcMain.handle('integrations:list', () => listIntegrations())
+    ipcMain.handle('integrations:providers', () => integrationProviders())
+    ipcMain.handle('integrations:disconnect', (_e, id: string) => disconnectIntegration(id))
+    ipcMain.handle('notion:connect', () => connectNotion())
+    ipcMain.handle('notion:parents', () => notionParents())
+    ipcMain.handle('notion:set-parent', (_e, pageId: string) => setNotionParent(pageId))
+    ipcMain.handle('notion:save', (_e, req: NotionSaveRequest) => saveToNotion(req))
+    ipcMain.handle('notion:page', (_e, noteId: string) => notionPage(noteId))
+  }
 
   ipcMain.handle('media:system-audio-mode', () =>
     process.platform === 'win32' ? 'loopback' : coreAudioTap ? 'tap' : 'screen'
@@ -404,7 +410,7 @@ function setupIpc() {
   ipcMain.on('update:install', () => installUpdate())
 }
 
-app.setName('Oats')
+app.setName(product.name)
 app.whenReady().then(async () => {
   // A second copy is on its way out (above) and must not touch the database.
   if (!locked || otherCopy) return
@@ -415,7 +421,7 @@ app.whenReady().then(async () => {
     console.error('Could not open the database', err)
     dialog.showMessageBoxSync({
       type: 'error',
-      message: 'Oats couldn’t open your notes',
+      message: `${product.name} couldn’t open your notes`,
       detail: `${err instanceof Error ? err.message : String(err)}\n\nNothing was changed: the notes are still in ${join(app.getPath('userData'), 'oats.db')}.`
     })
     app.exit(1)
@@ -438,7 +444,8 @@ app.whenReady().then(async () => {
   })
   createWindow()
   started = true
-  if (data.settings.transcriptionProvider === 'whisper') asr.prewarmModel(data.settings.whisperModel)
+  if (!features.cloudTranscription || data.settings.transcriptionProvider === 'whisper')
+    asr.prewarmModel(data.settings.whisperModel)
   setMeetingDetection(data.settings.detectMeetings, meetingHandlers)
   initSemantic((status) => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send('semantic:status', status)

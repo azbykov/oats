@@ -2,6 +2,7 @@ import { app, shell } from 'electron'
 import { createDecipheriv, createECDH, createHash, hkdfSync, randomBytes } from 'node:crypto'
 import { createServer, type ServerResponse } from 'node:http'
 import type { AccountProvider } from '../common/types'
+import { product } from './product'
 
 // The installed-app OAuth flow (RFC 8252): the system browser shows the consent
 // page and a listener on 127.0.0.1 catches the redirect, with PKCE. Two setups:
@@ -73,21 +74,21 @@ export const isConfigured = (provider: OAuthProvider) => !!SITE || (provider !==
 const base64url = (buf: Buffer) => buf.toString('base64url')
 
 const PAGES = {
-  ok: ['You’re signed in', 'Going back to Oats. You can close this tab.'],
-  error: ['Sign-in didn’t finish', 'Go back to Oats and try again.'],
-  cancelled: ['Sign-in cancelled', 'Go back to Oats if you want to try again.'],
-  expired: ['This sign-in has expired', 'Go back to Oats and start again.']
+  ok: ['You’re signed in', `Going back to ${product.name}. You can close this tab.`],
+  error: ['Sign-in didn’t finish', `Go back to ${product.name} and try again.`],
+  cancelled: ['Sign-in cancelled', `Go back to ${product.name} if you want to try again.`],
+  expired: ['This sign-in has expired', `Go back to ${product.name} and start again.`]
 } as const
 
-/** Opens Oats (the oats:// scheme registered in index.ts) from the finished sign-in tab. */
-const APP_LINK = 'oats://signed-in'
+/** Opens the app (its own scheme, registered in index.ts) from the finished sign-in tab. */
+const APP_LINK = `${product.protocol}://signed-in`
 
 const page = (title: string, text: string, backToApp: boolean) =>
   `<!doctype html><meta charset="utf-8"><title>${title}</title>` +
   `<body style="font:15px -apple-system,system-ui,sans-serif;display:grid;place-items:center;height:90vh;color:#3b3b38">` +
   `<div style="text-align:center"><h2 style="font-weight:600">${title}</h2><p>${text}</p>` +
   (backToApp
-    ? `<p><a href="${APP_LINK}" style="display:inline-block;padding:8px 16px;border-radius:999px;background:#3b3b38;color:#fff;text-decoration:none">Open Oats</a></p>` +
+    ? `<p><a href="${APP_LINK}" style="display:inline-block;padding:8px 16px;border-radius:999px;background:#3b3b38;color:#fff;text-decoration:none">Open ${product.name}</a></p>` +
       `<script>location.href = ${JSON.stringify(APP_LINK)}</script>`
     : '') +
   `</div>`
@@ -236,7 +237,7 @@ export interface NotionGrant {
 
 /** Signs in to Notion through the site; the tokens arrive sealed to a key only this sign-in holds. */
 export async function authorizeNotion(): Promise<{ grant: NotionGrant; tokens: Tokens }> {
-  if (!SITE) throw new OAuthError('Notion needs the Oats site (MAIN_VITE_AUTH_URL) in this build')
+  if (!SITE) throw new OAuthError(`Notion needs the ${product.name} site (MAIN_VITE_AUTH_URL) in this build`)
   const ecdh = createECDH('prime256v1')
   const key = base64url(ecdh.generateKeys())
   const { state, query } = await browserSignIn((state) => {
@@ -295,7 +296,7 @@ export async function revokeTokens(provider: AccountProvider, tokens: Tokens) {
 }
 
 async function tokenRequest(provider: OAuthProvider, params: Record<string, string>): Promise<Tokens> {
-  if (!SITE && provider === 'notion') throw new OAuthError('Notion needs the Oats site (MAIN_VITE_AUTH_URL) in this build')
+  if (!SITE && provider === 'notion') throw new OAuthError(`Notion needs the ${product.name} site (MAIN_VITE_AUTH_URL) in this build`)
   const cfg = provider === 'notion' ? null : CONFIG[provider]
   const res = await fetch(SITE || !cfg ? `${SITE}/api/oauth/${provider}/token` : cfg.tokenUrl, {
     method: 'POST',

@@ -11,6 +11,7 @@ import {
   saveChunks
 } from './silo'
 import type { StoredChunk } from '../silo/api'
+import { product } from './product'
 
 // Semantic search over notes: each note is split into passages of about a thousand
 // characters (transcript by time, notes and generated notes by paragraph), embedded once
@@ -93,7 +94,7 @@ function giveUp(err: EmbedError) {
   console.error('Semantic search is off:', err.message)
   const error =
     process.platform === 'win32'
-      ? 'The search model couldn’t start. Install the Microsoft Visual C++ Redistributable (x64) and restart Oats.'
+      ? `The search model couldn’t start. Install the Microsoft Visual C++ Redistributable (x64) and restart ${product.name}.`
       : `The search model couldn’t start: ${err.message.split('\n')[0].slice(0, 160)}`
   publish({ model: 'unavailable', error })
 }

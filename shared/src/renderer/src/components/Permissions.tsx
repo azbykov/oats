@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { PermissionKind, Permissions } from '../../../common/types'
 import { isMac } from '../lib/platform'
 import { Button } from './ui'
+import { product } from '../lib/product'
 
 /** Current permission state, refreshed whenever the window regains focus (e.g. back from System Settings). */
 export function usePermissions() {
@@ -52,7 +53,7 @@ export function PermissionRow({
         <div className="text-[12px] text-ink-tertiary">
           {state === 'denied'
             ? isMac
-              ? 'Turned off in System Settings. Turn on “Electron” (or “Oats”) there.'
+              ? `Turned off in System Settings. Turn on “Electron” (or “${product.name}”) there.`
               : 'Turned off in Windows Settings → Privacy & security → Microphone. Turn on desktop app access there.'
             : state === 'not-determined'
               ? `Not allowed yet. ${hint}`

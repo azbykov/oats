@@ -19,6 +19,7 @@ import { GrainSpinner } from './Logo'
 import { PermissionRow } from './Permissions'
 import { ExtLink, input, WhisperModels } from './SettingsView'
 import { Button, IconButton } from './ui'
+import { localTranscription, product } from '../lib/product'
 
 function StateIcon({ state, required = true }: { state: CheckState | null; required?: boolean }) {
   if (state === 'ok') return <Check size={14} className="text-ink-accent" />
@@ -79,7 +80,7 @@ export function SetupCard() {
       <div className="flex items-start gap-2.5">
         <CircleAlert size={15} className="mt-0.5 shrink-0 text-ink-danger" />
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium text-ink-strong">Oats needs attention</div>
+          <div className="text-[13px] font-medium text-ink-strong">{product.name} needs attention</div>
           <div className="text-[12px] leading-snug text-ink-tertiary">
             {attention.length === 1 ? attention[0].detail : attention.map((i) => i.title).join(', ')}
           </div>
@@ -189,22 +190,24 @@ function TranscriptionStep() {
   const native = useProbe((s) => s.native)
   return (
     <>
-      <Section title="Speech-to-text">
-        <ProviderButtons
-          value={settings.transcriptionProvider}
-          options={[
-            ['whisper', `Whisper on ${thisComputer}`],
-            ['deepgram', 'Deepgram (cloud)']
-          ]}
-          onChange={(transcriptionProvider) => update({ transcriptionProvider })}
-        />
-      </Section>
-      {settings.transcriptionProvider === 'whisper' ? (
+      {product.features.cloudTranscription && (
+        <Section title="Speech-to-text">
+          <ProviderButtons
+            value={settings.transcriptionProvider}
+            options={[
+              ['whisper', `Whisper on ${thisComputer}`],
+              ['deepgram', 'Deepgram (cloud)']
+            ]}
+            onChange={(transcriptionProvider) => update({ transcriptionProvider })}
+          />
+        </Section>
+      )}
+      {localTranscription(settings) ? (
         native === false ? (
           <p className="text-[13px] text-ink-danger">
             {import.meta.env.DEV
-              ? 'The audio helper isn’t built. Run npm run build:native and restart Oats.'
-              : 'The audio helper is missing from this build. Reinstall Oats or use Deepgram.'}
+              ? `The audio helper isn’t built. Run npm run build:native and restart ${product.name}.`
+              : `The audio helper is missing from this build. Reinstall ${product.name}${product.features.cloudTranscription ? ' or use Deepgram' : ''}.`}
           </p>
         ) : (
           <Section
@@ -339,7 +342,7 @@ function CalendarStep() {
     <>
       <AccountsSettings />
       <p className="mt-3 text-[12px] leading-snug text-ink-tertiary">
-        Optional. Oats only reads calendars. Another calendar can be added by its iCal link in Settings → Calendar.
+        Optional. {product.name} only reads calendars. Another calendar can be added by its iCal link in Settings → Calendar.
       </p>
     </>
   )
@@ -360,11 +363,16 @@ function DoneStep({ onFix }: { onFix: (step: SetupStep) => void }) {
 }
 
 const STEP_COPY: Record<SetupStep, { title: string; hint: string }> = {
-  permissions: { title: 'Let Oats hear the meeting', hint: 'Your microphone is “Me”; system audio is everyone else on the call.' },
-  transcription: { title: 'Choose how speech becomes text', hint: 'Local Whisper is private and free; Deepgram is cloud and needs a key.' },
+  permissions: { title: `Let ${product.name} hear the meeting`, hint: 'Your microphone is “Me”; system audio is everyone else on the call.' },
+  transcription: {
+    title: 'Choose how speech becomes text',
+    hint: product.features.cloudTranscription
+      ? 'Local Whisper is private and free; Deepgram is cloud and needs a key.'
+      : 'Whisper runs on this computer: private and free.'
+  },
   ai: { title: 'Connect the AI that writes your notes', hint: 'A subscription you already pay for works, or an API key.' },
   calendar: { title: 'See your meetings coming up', hint: 'Notes start with the meeting’s title and people already filled in.' },
-  done: { title: 'You’re set', hint: 'Everything Oats needs, at a glance. This list is always in Settings → Setup.' }
+  done: { title: 'You’re set', hint: `Everything ${product.name} needs, at a glance. This list is always in Settings → Setup.` }
 }
 
 export function SetupWizard() {
@@ -385,7 +393,7 @@ export function SetupWizard() {
       <div className="drag h-[52px] shrink-0" />
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 gap-6 px-6 pb-8">
         <nav className="flex w-44 shrink-0 flex-col gap-0.5 pt-1">
-          <div className="mb-3 px-2.5 font-display text-[22px] tracking-tight text-ink-strong">Set up Oats</div>
+          <div className="mb-3 px-2.5 font-display text-[22px] tracking-tight text-ink-strong">Set up {product.name}</div>
           {SETUP_STEPS.map((s) => (
             <button
               key={s.id}
@@ -423,7 +431,7 @@ export function SetupWizard() {
             </Button>
             {last ? (
               <Button variant="accent" onClick={finish}>
-                {ready ? 'Start using Oats' : 'Finish later'}
+                {ready ? `Start using ${product.name}` : 'Finish later'}
               </Button>
             ) : (
               <Button variant="accent" onClick={() => openSetup(SETUP_STEPS[index + 1].id)}>

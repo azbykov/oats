@@ -4,5 +4,5 @@
     "jsx": "react-jsx", "strict": true, "skipLibCheck": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"], "composite": true, "noEmit": true
   },
-  "include": ["shared/src/renderer/src/**/*", "shared/src/preload/*.d.ts", "shared/src/common/**/*"]
+  "include": ["apps/*/src/renderer/**/*", "apps/*/src/product.ts", "shared/src/renderer/src/**/*", "shared/src/preload/*.d.ts", "shared/src/common/**/*"]
 }

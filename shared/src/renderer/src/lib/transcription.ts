@@ -1,6 +1,7 @@
 import type { Settings, Speaker } from '../../../common/types'
 import { ChannelRecorder, LiveMic, matchMicrophone, microphones, PcmTap } from './capture'
 import { isMac } from './platform'
+import { localTranscription } from './product'
 import { processSession } from './postprocess'
 import { uid, useStore } from './store'
 
@@ -349,7 +350,6 @@ export async function startTranscription(noteId: string) {
   const { data, setRecording } = useStore.getState()
   if (!data) return
   const {
-    transcriptionProvider,
     deepgramApiKey,
     language,
     captureSystemAudio,
@@ -357,7 +357,7 @@ export async function startTranscription(noteId: string) {
     keepAudioBackup,
     micSource
   } = data.settings
-  const local = transcriptionProvider === 'whisper'
+  const local = localTranscription(data.settings)
   if (!local && !deepgramApiKey) {
     setRecording({ noteId, status: 'error', error: 'Add a Deepgram API key in Settings → Transcription.' })
     return

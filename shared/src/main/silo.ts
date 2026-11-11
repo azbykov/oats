@@ -2,7 +2,7 @@ import { app, safeStorage, utilityProcess, type UtilityProcess } from 'electron'
 import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BUILT_IN_TEMPLATES, DEFAULT_SETTINGS } from '../common/defaults'
+import { DEFAULT_SETTINGS } from '../common/defaults'
 import type { AppData, DataOp, Settings, Template } from '../common/types'
 import {
   pickSecrets,
@@ -15,6 +15,7 @@ import {
   type SiloTransport,
   type StoredChunk
 } from '../silo/api'
+import { product } from './product'
 import { seal, unseal } from './sealed'
 
 // The main process's side of the silo, the process that owns the database (shared/src/silo).
@@ -24,9 +25,16 @@ import { seal, unseal } from './sealed'
 
 /** Settings and the full template list, as last saved. */
 export const state: { settings: Settings; templates: Template[] } = {
-  settings: { ...DEFAULT_SETTINGS },
-  templates: BUILT_IN_TEMPLATES
+  settings: { ...DEFAULT_SETTINGS, ...product.settings },
+  templates: product.templates
 }
+
+/** What the silo opens the database with: where it is, its key and the app's defaults. */
+const opening = (): Parameters<SiloApi['open']> => [
+  app.getPath('userData'),
+  databaseKey(),
+  { settings: { ...DEFAULT_SETTINGS, ...product.settings }, templates: product.templates, recipes: product.recipes }
+]
 
 const CLOSE_TIMEOUT_MS = 3000
 
@@ -46,7 +54,7 @@ function request(method: SiloMethod, args: unknown[]): Promise<unknown> {
 
 function fork() {
   if (child) return child
-  const proc = utilityProcess.fork(join(__dirname, 'oats-silo.js'), [], { serviceName: 'Oats Silo' })
+  const proc = utilityProcess.fork(join(__dirname, 'oats-silo.js'), [], { serviceName: `${product.name} Silo` })
   proc.on('message', (msg: SiloResponse) => {
     const p = pending.get(msg.id)
     pending.delete(msg.id)
@@ -67,7 +75,7 @@ function fork() {
 
 /** Requests over the silo process. One started again after a crash opens the database first. */
 const overProcess: SiloTransport = (method, args) => {
-  if (!child && method !== 'open') request('open', [app.getPath('userData'), databaseKey()]).catch(() => {})
+  if (!child && method !== 'open') request('open', opening()).catch(() => {})
   return request(method, args)
 }
 
@@ -115,7 +123,7 @@ function call<K extends SiloMethod>(method: K, ...args: Parameters<SiloApi[K]>) 
 export async function startSilo(over: SiloTransport = overProcess) {
   transport = over
   closed = false
-  await call('open', app.getPath('userData'), databaseKey())
+  await call('open', ...opening())
   Object.assign(state, await call('loadState'))
 }
 

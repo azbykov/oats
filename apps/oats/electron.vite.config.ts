@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import pkg from './package.json'
 
-// The app's code lives in shared/ (the repository root), next to the other apps'.
+// Most of the code is in shared/ (the repository root), next to the other apps'. What is
+// Oats's own is in src/: the profile and the entries that set it before the shared code loads.
 const shared = (path: string) => resolve(__dirname, '../../shared/src', path)
 // .env sits at the repository root (see .env.example).
 const envDir = resolve(__dirname, '../..')
@@ -20,7 +21,7 @@ export default defineConfig({
         // embedding model's utility process (semantic search). oats-silo.js: the
         // database's utility process.
         input: {
-          index: shared('main/index.ts'),
+          index: resolve(__dirname, 'src/main.ts'),
           'oats-audio': shared('sidecar/index.ts'),
           'oats-silo': shared('silo/index.ts'),
           embedder: shared('main/embedder.ts')
@@ -33,12 +34,13 @@ export default defineConfig({
     build: { rollupOptions: { input: { index: shared('preload/index.ts') } } }
   },
   renderer: {
-    root: shared('renderer'),
+    root: resolve(__dirname, 'src/renderer'),
+    publicDir: shared('renderer/public'),
     envDir,
     plugins: [react(), tailwindcss()],
     build: {
       outDir: resolve(__dirname, 'out/renderer'),
-      rollupOptions: { input: shared('renderer/index.html') }
+      rollupOptions: { input: resolve(__dirname, 'src/renderer/index.html') }
     },
     // Shown in Settings; package.json is the version electron-builder ships.
     define: { __APP_VERSION__: JSON.stringify(pkg.version) }
