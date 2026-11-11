@@ -1,7 +1,7 @@
 // Smoke test for the encrypted database in the packaged app: loads
 // better-sqlite3-multiple-ciphers from the app bundle through the app's own executable
 // (ELECTRON_RUN_AS_NODE), writes a database with a key the way the silo does
-// (src/silo/store.ts) and reads it back. Catches a native binary that was left out of the
+// (shared/src/silo/store.ts) and reads it back. Catches a native binary that was left out of the
 // package, kept inside app.asar, or can't load on this system: any of those would stop
 // Oats from opening anyone's notes.
 //

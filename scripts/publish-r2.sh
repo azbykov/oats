@@ -33,7 +33,7 @@ exe="$dir/Oats-Setup-$version.exe"
 zip="$dir/Oats-mac-arm64.zip"
 zip_x64="$dir/Oats-mac-x64.zip"
 for f in "$exe" "$zip" "$zip_x64"; do
-  [[ -f $f ]] || { echo "missing $f (does the tag match package.json's version?)" >&2; exit 1; }
+  [[ -f $f ]] || { echo "missing $f (does the tag match the version in apps/oats/package.json?)" >&2; exit 1; }
 done
 
 export AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY AWS_DEFAULT_REGION=auto

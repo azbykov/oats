@@ -100,8 +100,8 @@ Apple Silicon (Core Audio Tap на macOS 14.2+; модуль `native/tcc` соб
 npm run dist:mac-x64
 ```
 
-Скрипт доставляет x64-версии аддонов (`npm run deps:mac-x64`) и собирает по `electron-builder.mac-x64.yml`
-(без Swift-помощника и arm64-аддонов). Apple Silicon собирается по `electron-builder.mac-arm64.yml`
+Скрипт доставляет x64-версии аддонов (`npm run deps:mac-x64`) и собирает по `apps/oats/electron-builder.mac-x64.yml`
+(без Swift-помощника и arm64-аддонов). Apple Silicon собирается по `apps/oats/electron-builder.mac-arm64.yml`
 (`npm run dist:mac`); общие настройки — в `electron-builder.yml`. На Apple Silicon Intel-сборку можно запустить
 только с установленным Rosetta.
 
@@ -125,7 +125,7 @@ npm run dist:mac-x64
 В GitHub → **Settings → Secrets and variables → Actions**: секреты `R2_ACCOUNT_ID` (ID аккаунта Cloudflare),
 `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` из токена.
 
-Релиз — тег с версией из `package.json` (иначе `publish` остановится):
+Релиз — тег с версией из `apps/oats/package.json` (иначе `publish` остановится):
 
 ```bash
 git tag v0.1.1
@@ -162,11 +162,24 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 
 ## Как устроено
 
-- `src/main` — Electron main: окно, клиент хранилища (`silo.ts`: запросы к процессу базы и копия настроек),
+Репозиторий — монорепо на npm workspaces:
+
+- `apps/oats` — само приложение Oats: `package.json` с версией и зависимостями, конфиги сборки
+  (`electron.vite.config.ts`, `electron-builder*.yml`), значки в `resources/`. Кода здесь нет.
+- `shared/src` — весь код. Его собирает `apps/oats`; здесь же будет общий код других приложений на этой основе.
+- `native/`, `scripts/` — нативные части и скрипты, общие.
+
+Команды запускаются из корня (`npm run dev`, `npm test`, `npm run dist:mac`): корневой `package.json`
+передаёт их в `apps/oats`. Сборки, как и раньше, появляются в `dist/` в корне.
+
+Внутри `shared/src`:
+
+- `common` — типы, настройки и шаблоны по умолчанию, список моделей Whisper; общие для всех процессов.
+- `main` — Electron main: окно, клиент хранилища (`silo.ts`: запросы к процессу базы и копия настроек),
   вызовы Claude / OpenAI (`ai.ts`), парсер ICS (`ics.ts`), обработчик системного звука; вход через Google / Яндекс
   (`oauth.ts`, `accounts.ts`) и их календари (`google.ts`, `yandex.ts`, сводит всё `calendar.ts`); Notion
   (`integrations.ts`, `notion.ts`).
-- `src/silo` — silo, отдельный процесс базы (`utilityProcess`, в сборке `oats-silo.js`): только он открывает SQLite
+- `silo` — silo, отдельный процесс базы (`utilityProcess`, в сборке `oats-silo.js`): только он открывает SQLite
   (`~/Library/Application Support/Oats/oats.db`, WAL; строки транскрипта — отдельные записи, поиск — FTS5 с trigram;
   старый `oats-data.json` переносится при первом запуске и остаётся как `oats-data.json.bak`). База зашифрована
   целиком (SQLCipher, [`better-sqlite3-multiple-ciphers`](https://github.com/m4heshd/better-sqlite3-multiple-ciphers),
@@ -175,8 +188,8 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
   остаётся рядом как `oats-unencrypted.db.bak` и удаляется через 14 дней. Main-процесс шлёт silo запросы (`api.ts`) и
   ждёт его при выходе. Базу, которая не открылась, silo не трогает: приложение показывает ошибку и закрывается.
   Аудио сессий (`recordings/*.wav`) пока не шифруется.
-- `src/preload` — мост `window.oats`.
-- `src/sidecar` — тот же CLI `oats-audio` на Node (Windows, Intel Mac): `listen` / `transcribe` / `prepare-asr` на
+- `preload` — мост `window.oats`.
+- `sidecar` — тот же CLI `oats-audio` на Node (Windows, Intel Mac): `listen` / `transcribe` / `prepare-asr` на
   whisper.cpp ([`@fugood/whisper.node`](https://github.com/mybigday/whisper.node), MIT; ggml-модели в
   `<appData>/Oats/models/ggml`), Silero VAD и `diarize` / `embed` на [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
   (Apache-2.0; pyannote segmentation 3.0 + WeSpeaker, ~32 МБ в `<appData>/Oats/models/sherpa`), `watch-mic` — записи
@@ -196,7 +209,7 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 - Захват звука (как в Notion): системный звук — Chromium-фича `MacCatapLoopbackAudioForScreenShare` (Core Audio Tap),
   аудио-only `getDisplayMedia` без захвата экрана; микрофон — сырой, с `echoCancellation: "all"`, который вычитает всё,
   что играет Mac, поэтому собеседники из динамиков не попадают в «Me».
-- `src/renderer` — React 19 + TipTap + Tailwind 4, палитра «oats».
+- `renderer` — React 19 + TipTap + Tailwind 4, палитра «oats».
 
 Своего облака нет: шаблоны и промпты встроены в приложение, ИИ и транскрипция — прямые вызовы Claude / OpenAI и
 Deepgram с ключами пользователя.
