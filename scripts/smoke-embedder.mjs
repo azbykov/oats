@@ -4,13 +4,14 @@
 // checks that the VC++ runtime DLLs ship next to the binding (scripts/copy-vcruntime.mjs):
 // CI runners have the Redistributable installed, so loading alone wouldn't catch them missing.
 //
-//   node scripts/smoke-embedder.mjs <dist/win-unpacked | dist/mac-arm64/Oats.app>
+//   node scripts/smoke-embedder.mjs <dist/win-unpacked | dist/mac-arm64/Oats.app | dist/rye/mac-arm64/Rye.app>
 //
 // Needs no model download: a few bytes that aren't a model are enough to reach the parser.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { appExecutable } from './app-exe.mjs'
 
 const appDir = process.argv[2] && resolve(process.argv[2])
 if (!appDir) {
@@ -19,7 +20,7 @@ if (!appDir) {
 }
 
 const mac = appDir.endsWith('.app')
-const exe = mac ? join(appDir, 'Contents', 'MacOS', 'Oats') : join(appDir, 'Oats.exe')
+const exe = appExecutable(appDir)
 const resources = mac ? join(appDir, 'Contents', 'Resources') : join(appDir, 'resources')
 const binDir = join(resources, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', process.platform, process.arch)
 

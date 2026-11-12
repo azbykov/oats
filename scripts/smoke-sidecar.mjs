@@ -3,7 +3,7 @@
 // so it checks packaging (asar, unpacked addons) as well as whisper.cpp and
 // sherpa-onnx on this machine.
 //
-//   node scripts/smoke-sidecar.mjs <dist/win-unpacked | dist/mac-arm64/Oats.app> <speech.wav>
+//   node scripts/smoke-sidecar.mjs <dist/win-unpacked | dist/mac-arm64/Oats.app | dist/rye/mac-arm64/Rye.app> <speech.wav>
 //
 // The WAV must be 16 kHz mono 16-bit with a few seconds of speech. Models go to
 // $RUNNER_TEMP (or the OS temp dir)/oats-smoke-models.
@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { appExecutable } from './app-exe.mjs'
 
 const [appDir, wav] = process.argv.slice(2).map((p) => p && resolve(p))
 if (!appDir || !wav) {
@@ -20,7 +21,7 @@ if (!appDir || !wav) {
 }
 
 const mac = appDir.endsWith('.app')
-const exe = mac ? join(appDir, 'Contents', 'MacOS', 'Oats') : join(appDir, 'Oats.exe')
+const exe = appExecutable(appDir)
 const resources = mac ? join(appDir, 'Contents', 'Resources') : join(appDir, 'resources')
 const script = join(resources, 'app.asar', 'out', 'main', 'oats-audio.js')
 const models = join(process.env.RUNNER_TEMP ?? tmpdir(), 'oats-smoke-models')
