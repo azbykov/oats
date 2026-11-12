@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Rye's mark: an ear of rye. Full bleed; the Windows icon is rendered from this. -->
+  <rect width="64" height="64" rx="16" fill="#1f3a3c"/>
+  <g transform="rotate(18 32 32)">
+    <path d="M32 20v35" stroke="#ecc56b" stroke-width="2.4" stroke-linecap="round"/>
+    <ellipse cx="32" cy="15.5" rx="4.3" ry="7.5" fill="#ecc56b"/>
+    <g fill="#ecc56b">
+      <ellipse cx="25" cy="26.5" rx="4" ry="7.5" transform="rotate(-30 25 26.5)"/>
+      <ellipse cx="39" cy="26.5" rx="4" ry="7.5" transform="rotate(30 39 26.5)"/>
+      <ellipse cx="25" cy="38" rx="4" ry="7.5" transform="rotate(-30 25 38)"/>
+      <ellipse cx="39" cy="38" rx="4" ry="7.5" transform="rotate(30 39 38)"/>
+    </g>
+  </g>
+</svg>

@@ -1,11 +1,18 @@
 #!/bin/sh
-# Renders the app icons from the logo SVGs (macOS only: sips + iconutil):
-#   resources/icon.svg  (logo on the macOS icon grid) -> icon.icns, icon.png
-#   resources/icon-dev.svg (violet dev variant)       -> icon-dev.png
-#   src/renderer/src/assets/logo.svg (full bleed)     -> icon.ico
+# Renders an app's icons from its logo SVGs (macOS only: sips + iconutil):
+#   scripts/build-icons.sh [oats|rye]      (oats when not given)
+#   apps/<app>/resources/icon.svg  (logo on the macOS icon grid) -> icon.icns, icon.png
+#   apps/<app>/resources/icon-dev.svg (violet dev variant)       -> icon-dev.png
+#   apps/<app>/resources/logo.svg (full bleed)                   -> icon.ico
+#     Oats has no logo.svg of its own: its mark is the one the window shows,
+#     shared/src/renderer/src/assets/logo.svg.
 # The results are committed; rerun after changing either SVG.
 set -e
 cd "$(dirname "$0")/.."
+res="apps/${1:-oats}/resources"
+[ -f "$res/icon.svg" ] || { echo "no $res/icon.svg" >&2; exit 1; }
+logo="$res/logo.svg"
+[ -f "$logo" ] || logo=shared/src/renderer/src/assets/logo.svg
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -13,17 +20,17 @@ render() { sips -s format png -z "$2" "$2" "$1" --out "$3" >/dev/null; }
 
 mkdir "$tmp/icon.iconset"
 for size in 16 32 128 256 512; do
-  render resources/icon.svg "$size" "$tmp/icon.iconset/icon_${size}x${size}.png"
-  render resources/icon.svg $((size * 2)) "$tmp/icon.iconset/icon_${size}x${size}@2x.png"
+  render "$res/icon.svg" "$size" "$tmp/icon.iconset/icon_${size}x${size}.png"
+  render "$res/icon.svg" $((size * 2)) "$tmp/icon.iconset/icon_${size}x${size}@2x.png"
 done
-iconutil -c icns "$tmp/icon.iconset" -o resources/icon.icns
-cp "$tmp/icon.iconset/icon_512x512@2x.png" resources/icon.png
+iconutil -c icns "$tmp/icon.iconset" -o "$res/icon.icns"
+cp "$tmp/icon.iconset/icon_512x512@2x.png" "$res/icon.png"
 # Dev builds (npm run dev) set this one on the window and Dock instead.
-render resources/icon-dev.svg 1024 resources/icon-dev.png
+render "$res/icon-dev.svg" 1024 "$res/icon-dev.png"
 
 # .ico with PNG-compressed entries (Windows Vista+).
 for size in 16 24 32 48 64 128 256; do
-  render src/renderer/src/assets/logo.svg "$size" "$tmp/ico-$size.png"
+  render "$logo" "$size" "$tmp/ico-$size.png"
 done
 node -e '
 const fs = require("node:fs")
@@ -43,6 +50,6 @@ sizes.forEach((s, i) => {
   header.writeUInt32LE(offset, e + 12)
   offset += pngs[i].length
 })
-fs.writeFileSync("resources/icon.ico", Buffer.concat([header, ...pngs]))
-' "$tmp"
-ls -l resources/icon.icns resources/icon.ico resources/icon.png
+fs.writeFileSync(process.argv[2], Buffer.concat([header, ...pngs]))
+' "$tmp" "$res/icon.ico"
+ls -l "$res/icon.icns" "$res/icon.ico" "$res/icon.png"

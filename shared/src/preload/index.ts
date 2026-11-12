@@ -1,0 +1,139 @@
+import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  Account,
+  AccountProvider,
+  AiStreamEvent,
+  AsrEvent,
+  AppData,
+  DataOp,
+  CalendarResult,
+  ChatRequest,
+  CliModel,
+  CliStatus,
+  DiarizationResult,
+  EnhanceRequest,
+  Integration,
+  IntegrationProvider,
+  MeetingApp,
+  MeetingStart,
+  MicInput,
+  NotionPageRef,
+  NotionParentPage,
+  NotionSaveRequest,
+  PermissionKind,
+  PermissionState,
+  Permissions,
+  PillAction,
+  PillState,
+  RecordingMeta,
+  RecoveredSegment,
+  SemanticHit,
+  SemanticStatus,
+  UpdateState,
+  WhisperModel
+} from '../common/types'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const on = <A extends any[]>(channel: string, cb: (...args: A) => void) => {
+  const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...(args as A))
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.off(channel, listener)
+  }
+}
+
+const api = {
+  platform: process.platform,
+  loadData: (): Promise<AppData> => ipcRenderer.invoke('data:load'),
+  /** Saves changes; see DataOp. */
+  applyData: (ops: DataOp[]) => ipcRenderer.send('data:apply', ops),
+  /** Ids of notes containing every word of the query (words under 3 characters are ignored). */
+  searchNotes: (query: string): Promise<string[]> => ipcRenderer.invoke('data:search', query),
+  getSemanticStatus: (): Promise<SemanticStatus> => ipcRenderer.invoke('semantic:status'),
+  onSemanticStatus: (cb: (status: SemanticStatus) => void) => on('semantic:status', cb),
+  downloadSemanticModel: () => ipcRenderer.send('semantic:download'),
+  removeSemanticModel: () => ipcRenderer.send('semantic:remove'),
+  /** Passages closest in meaning to the query, or null when the model isn't downloaded. */
+  semanticSearch: (query: string, noteIds?: string[], limit?: number): Promise<SemanticHit[] | null> =>
+    ipcRenderer.invoke('semantic:search', query, noteIds, limit),
+  enhance: (id: string, req: EnhanceRequest) => ipcRenderer.invoke('ai:enhance', id, req),
+  chat: (id: string, req: ChatRequest) => ipcRenderer.invoke('ai:chat', id, req),
+  abortAi: (id: string) => ipcRenderer.send('ai:abort', id),
+  listOpenAIModels: (): Promise<string[]> => ipcRenderer.invoke('ai:openai-models'),
+  cliStatus: (kind: 'claude' | 'codex'): Promise<CliStatus> => ipcRenderer.invoke('ai:cli-status', kind),
+  listCodexModels: (): Promise<CliModel[]> => ipcRenderer.invoke('ai:codex-models'),
+  onAiEvent: (cb: (id: string, event: AiStreamEvent) => void) => on('ai:event', cb),
+  listWhisperModels: (): Promise<WhisperModel[]> => ipcRenderer.invoke('asr:models'),
+  downloadWhisperModel: (id: string) => ipcRenderer.send('asr:prepare', id),
+  onWhisperModels: (cb: (models: WhisperModel[]) => void) => on('asr:models', cb),
+  startWhisper: (model: string, language: string, words: boolean): Promise<void> =>
+    ipcRenderer.invoke('asr:start', model, language, words),
+  whisperLoaded: (model: string, language: string, words: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('asr:loaded', model, language, words),
+  sendWhisperFrame: (kind: 1 | 2 | 3, channel: number, pcm?: ArrayBuffer) =>
+    ipcRenderer.send('asr:frame', kind, channel, pcm),
+  onWhisperEvent: (cb: (event: AsrEvent) => void) => on('asr:event', cb),
+  nativeAudioAvailable: (): Promise<boolean> => ipcRenderer.invoke('native:available'),
+  beginRecording: (meta: RecordingMeta) => ipcRenderer.send('rec:begin', meta),
+  appendRecording: (id: string, pcm: ArrayBuffer) => ipcRenderer.send('rec:chunk', id, pcm),
+  finishRecording: (id: string): Promise<void> => ipcRenderer.invoke('rec:finish', id),
+  diarizeRecording: (id: string, maxSpeakers?: number): Promise<DiarizationResult> =>
+    ipcRenderer.invoke('rec:diarize', id, maxSpeakers),
+  transcribeRecording: (id: string, words: boolean): Promise<RecoveredSegment[]> =>
+    ipcRenderer.invoke('rec:transcribe', id, words),
+  removeRecording: (id: string): Promise<void> => ipcRenderer.invoke('rec:remove', id),
+  leftoverRecordings: (): Promise<RecordingMeta[]> => ipcRenderer.invoke('rec:leftovers'),
+  activeMeetingApps: (): Promise<MeetingApp[]> => ipcRenderer.invoke('meeting:active'),
+  followCallMic: (on: boolean) => ipcRenderer.send('mic:follow', on),
+  callMicInputs: (): Promise<MicInput[]> => ipcRenderer.invoke('mic:call-inputs'),
+  onCallMicInputs: (cb: (inputs: MicInput[]) => void) => on('mic:call-inputs', cb),
+  onMeetingDetected: (cb: (app: MeetingApp) => void) => on('meeting:detected', cb),
+  onMeetingEnded: (cb: (app: MeetingApp) => void) => on('meeting:ended', cb),
+  onSystemSuspend: (cb: () => void) => on('system:suspend', cb),
+  onMeetingStart: (cb: (start: MeetingStart) => void) => on('meeting:start', cb),
+  onMeetingIgnore: (cb: (app: MeetingApp) => void) => on('meeting:ignore', cb),
+  previewMeetingCard: () => ipcRenderer.send('meeting:preview'),
+  getPillState: (): Promise<PillState | null> => ipcRenderer.invoke('pill:get'),
+  onPillState: (cb: (state: PillState) => void) => on('pill:state', cb),
+  sendPillAction: (action: PillAction) => ipcRenderer.send('pill:action', action),
+  setPillIgnoreMouse: (ignore: boolean) => ipcRenderer.send('pill:ignore-mouse', ignore),
+  getCalendarEvents: (): Promise<CalendarResult> => ipcRenderer.invoke('calendar:events'),
+  listAccounts: (): Promise<Account[]> => ipcRenderer.invoke('accounts:list'),
+  accountProviders: (): Promise<Record<AccountProvider, boolean>> => ipcRenderer.invoke('accounts:providers'),
+  connectAccount: (provider: AccountProvider): Promise<Account> => ipcRenderer.invoke('accounts:connect', provider),
+  cancelConnect: () => ipcRenderer.send('accounts:cancel'),
+  disconnectAccount: (id: string): Promise<void> => ipcRenderer.invoke('accounts:disconnect', id),
+  setCalendarEnabled: (id: string, calendarId: string, enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('accounts:set-calendar', id, calendarId, enabled),
+  setAppPassword: (id: string, password: string): Promise<void> => ipcRenderer.invoke('accounts:app-password', id, password),
+  onAccountsChanged: (cb: (accounts: Account[]) => void) => on('accounts:changed', cb),
+  listIntegrations: (): Promise<Integration[]> => ipcRenderer.invoke('integrations:list'),
+  integrationProviders: (): Promise<Record<IntegrationProvider, boolean>> => ipcRenderer.invoke('integrations:providers'),
+  /** Cancelled with cancelConnect, like an account sign-in. */
+  connectNotion: (): Promise<Integration> => ipcRenderer.invoke('notion:connect'),
+  disconnectIntegration: (id: string): Promise<void> => ipcRenderer.invoke('integrations:disconnect', id),
+  onIntegrationsChanged: (cb: (integrations: Integration[]) => void) => on('integrations:changed', cb),
+  /** Pages shared with Oats where it can create its database. */
+  notionParents: (): Promise<NotionParentPage[]> => ipcRenderer.invoke('notion:parents'),
+  setNotionParent: (pageId: string): Promise<void> => ipcRenderer.invoke('notion:set-parent', pageId),
+  saveToNotion: (req: NotionSaveRequest): Promise<NotionPageRef> => ipcRenderer.invoke('notion:save', req),
+  /** The Notion page the note was saved to, if any. */
+  notionPage: (noteId: string): Promise<NotionPageRef | null> => ipcRenderer.invoke('notion:page', noteId),
+  getSystemAudioMode: (): Promise<'tap' | 'screen' | 'loopback'> => ipcRenderer.invoke('media:system-audio-mode'),
+  getPermissions: (): Promise<Permissions> => ipcRenderer.invoke('permissions:status'),
+  requestPermission: (kind: PermissionKind): Promise<PermissionState> => ipcRenderer.invoke('permissions:request', kind),
+  openPermissionSettings: (kind: PermissionKind) => ipcRenderer.send('permissions:open', kind),
+  exportMarkdown: (name: string, markdown: string): Promise<boolean> =>
+    ipcRenderer.invoke('export:markdown', name, markdown),
+  openExternal: (url: string) => ipcRenderer.send('open-external', url),
+  /** The page may not read the clipboard itself; plain-text paste goes through here. */
+  readClipboardText: (): Promise<string> => ipcRenderer.invoke('clipboard:read-text'),
+  getUpdate: (): Promise<UpdateState | null> => ipcRenderer.invoke('update:get'),
+  onUpdate: (cb: (state: UpdateState) => void) => on('update:state', cb),
+  installUpdate: () => ipcRenderer.send('update:install'),
+  onMenu: (name: 'new-note' | 'search' | 'settings' | 'focus', cb: () => void) => on(`menu:${name}`, cb)
+}
+
+export type OatsApi = typeof api
+
+contextBridge.exposeInMainWorld('oats', api)
