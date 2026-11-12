@@ -212,6 +212,7 @@ function TemplateMenu({
 /** The note's page in Notion and saving to it; "Saved" shows for a few seconds after a save. */
 function useNotion(noteId: string) {
   const integration = useStore((s) => s.integrations.find((i) => i.provider === 'notion'))
+  // Never true in an app without Notion: no integrations are loaded there.
   const connected = !!integration
   const [page, setPage] = useState<NotionPageRef | null>(null)
   const [saving, setSaving] = useState(false)

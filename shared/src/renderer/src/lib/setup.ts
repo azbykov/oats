@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import type { Account, CliStatus, Permissions, PermissionState, SemanticStatus, Settings, WhisperModel } from '../../../common/types'
 import { isMac } from './platform'
 import { useStore } from './store'
+import { localTranscription, product } from './product'
 
 // Is Oats ready to take notes? One checklist, used by the first-run wizard, the
 // sidebar card (something required broke) and Settings → Setup. It is computed
@@ -98,13 +99,13 @@ function permission(state: PermissionState | undefined, hint: string): Pick<Setu
   if (state === 'granted') return { state: 'ok', detail: 'Allowed' }
   if (state === 'denied') return { state: 'todo', detail: `Turned off in ${where}` }
   if (state === 'not-determined') return { state: 'todo', detail: `Not allowed yet. ${hint}` }
-  return { state: 'unknown', detail: 'Can’t be checked in this build; Oats asks when it starts recording' }
+  return { state: 'unknown', detail: `Can’t be checked in this build; ${product.name} asks when it starts recording` }
 }
 
 const percent = (m: WhisperModel) => `${Math.round((m.progress ?? 0) * 100)}%`
 
 function transcription(settings: Settings, probe: Probe): Pick<SetupItem, 'state' | 'detail'> {
-  if (settings.transcriptionProvider === 'deepgram') {
+  if (!localTranscription(settings)) {
     return settings.deepgramApiKey
       ? { state: 'ok', detail: 'Deepgram (cloud)' }
       : { state: 'todo', detail: 'Add a Deepgram API key, or switch to local Whisper' }
@@ -114,7 +115,7 @@ function transcription(settings: Settings, probe: Probe): Pick<SetupItem, 'state
       state: 'todo',
       detail: import.meta.env.DEV
         ? 'The audio helper isn’t built: run npm run build:native'
-        : 'The audio helper is missing from this build; reinstall Oats or switch to Deepgram'
+        : `The audio helper is missing from this build; reinstall ${product.name}${product.features.cloudTranscription ? ' or switch to Deepgram' : ''}`
     }
   }
   if (probe.native === null || !probe.models) return { state: 'checking', detail: 'Checking…' }

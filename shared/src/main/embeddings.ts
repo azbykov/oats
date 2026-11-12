@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { EmbedRequest, EmbedResponse } from './embedder'
+import { product } from './product'
 
 // Text embeddings for local semantic search: multilingual-e5-small (int8 ONNX, ~118 MB),
 // which places Russian and English passages with the same meaning close together.
@@ -19,7 +20,7 @@ const FILES = [
 export const EMBEDDING_MODEL = 'multilingual-e5-small-q8'
 
 // Shared by every data folder, like the Whisper models.
-const dir = () => join(app.getPath('appData'), 'Oats', 'models', 'multilingual-e5-small')
+const dir = () => join(app.getPath('appData'), product.modelsFolder, 'models', 'multilingual-e5-small')
 
 /**
  * Whether onnxruntime-node has a build for this platform (none for Intel Macs). Checked by
@@ -86,7 +87,7 @@ const pending = new Map<number, { resolve: (v: Float32Array[]) => void; reject: 
 
 function embedder() {
   if (child) return child
-  const proc = utilityProcess.fork(join(__dirname, 'embedder.js'), [], { serviceName: 'Oats embeddings' })
+  const proc = utilityProcess.fork(join(__dirname, 'embedder.js'), [], { serviceName: `${product.name} embeddings` })
   proc.on('message', (msg: EmbedResponse) => {
     const p = pending.get(msg.id)
     pending.delete(msg.id)

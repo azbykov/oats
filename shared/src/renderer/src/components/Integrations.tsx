@@ -4,6 +4,7 @@ import type { Integration, NotionParentPage } from '../../../common/types'
 import { useStore } from '../lib/store'
 import { errorMessage } from './Accounts'
 import { Button } from './ui'
+import { product } from '../lib/product'
 
 /** The Notion sign-in, shared by the Connect and Connect again buttons. */
 const useNotionSignIn = create<{
@@ -90,11 +91,11 @@ function ParentPicker({ onDone }: { onDone?: () => void }) {
   }
   return (
     <div className="flex flex-col gap-2 border-t border-hairline px-3 py-2.5 text-[12px] leading-snug text-ink-secondary">
-      <div>Choose a page for the “Oats Notes” database. Each saved note becomes a page in it.</div>
+      <div>Choose a page for the “{product.notion.databaseTitle}” database. Each saved note becomes a page in it.</div>
       {pages && pages.length === 0 && !error ? (
         <div className="flex items-center justify-between gap-2">
           <span>
-            No pages are shared with Oats. In Notion, open a page’s ••• menu → Connections and add Oats, then refresh.
+            No pages are shared with {product.name}. In Notion, open a page’s ••• menu → Connections and add {product.name}, then refresh.
           </span>
           <Button variant="ghost" size="sm" onClick={load}>
             Refresh
@@ -197,7 +198,7 @@ export function IntegrationsSettings() {
       {error && <div className="text-[12px] text-ink-danger">{error}</div>}
       {configured === false && !notion && (
         <div className="text-[12px] text-ink-tertiary">
-          Notion connects through the Oats site, which this build doesn’t use: set MAIN_VITE_AUTH_URL in .env (see
+          Notion connects through the {product.name} site, which this build doesn’t use: set MAIN_VITE_AUTH_URL in .env (see
           README).
         </div>
       )}

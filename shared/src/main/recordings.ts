@@ -112,7 +112,7 @@ async function withSidecar<T>(
 
 export function diarize(id: string, maxSpeakers?: number) {
   return withSidecar<DiarizationResult>(id, (wav, out) => {
-    const args = ['diarize', '--input', wav, '--output', out]
+    const args = ['diarize', '--input', wav, '--output', out, '--models-dir', whisperModelsDir()]
     if (maxSpeakers) args.push('--max-speakers', String(maxSpeakers))
     return args
   })

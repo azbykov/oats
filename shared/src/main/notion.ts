@@ -1,4 +1,5 @@
 import type { NotionParentPage, NotionSaveRequest } from '../common/types'
+import { product } from './product'
 
 // Notion's REST API. The version with page markdown (create with `markdown`,
 // replace with PATCH /pages/:id/markdown), so notes go over as they are; pages
@@ -6,7 +7,8 @@ import type { NotionParentPage, NotionSaveRequest } from '../common/types'
 
 const API = 'https://api.notion.com/v1'
 const VERSION = '2026-03-11'
-export const DATABASE_TITLE = 'Oats Notes'
+export const DATABASE_TITLE = product.notion.databaseTitle
+const ID = product.notion.idProperty
 
 export class NotionError extends Error {
   constructor(
@@ -85,7 +87,7 @@ export async function templateTarget(call: NotionCall, pageId: string): Promise<
 }
 
 /** A database called "Oats Notes" the workspace already shares with Oats, e.g. from an earlier connection. */
-export async function findOatsDatabase(call: NotionCall): Promise<NotionTarget | undefined> {
+export async function findDatabase(call: NotionCall): Promise<NotionTarget | undefined> {
   const found = await call('POST', '/search', {
     query: DATABASE_TITLE,
     filter: { property: 'object', value: 'data_source' },
@@ -119,7 +121,7 @@ const PROPERTIES = {
   Date: { date: {} },
   Attendees: { rich_text: {} },
   Folders: { multi_select: {} },
-  'Oats ID': { rich_text: {} }
+  [ID]: { rich_text: {} }
 }
 
 export async function createDatabase(call: NotionCall, pageId: string): Promise<NotionTarget> {
@@ -156,7 +158,7 @@ function properties(schema: Record<string, { type: string }>, req: NotionSaveReq
   if (schema.Date?.type === 'date') out.Date = { date: { start: req.date } }
   list('Attendees', req.attendees)
   list('Folders', req.folders)
-  if (schema['Oats ID']?.type === 'rich_text') out['Oats ID'] = { rich_text: text(req.noteId) }
+  if (schema[ID]?.type === 'rich_text') out[ID] = { rich_text: text(req.noteId) }
   return out
 }
 
@@ -185,9 +187,9 @@ export async function savePage(
 
   let page = previousPageId ? await livePage(call, previousPageId) : null
   // Saved from another computer or before Oats lost track: find the note by its id.
-  if (!page && schema['Oats ID']?.type === 'rich_text') {
+  if (!page && schema[ID]?.type === 'rich_text') {
     const found = await call('POST', `/data_sources/${target.dataSourceId}/query`, {
-      filter: { property: 'Oats ID', rich_text: { equals: req.noteId } },
+      filter: { property: ID, rich_text: { equals: req.noteId } },
       page_size: 1
     })
     page = found.results?.[0] ?? null

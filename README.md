@@ -165,8 +165,11 @@ SmartScreen на Windows и про `xattr -dr com.apple.quarantine` на Mac.
 Репозиторий — монорепо на npm workspaces:
 
 - `apps/oats` — само приложение Oats: `package.json` с версией и зависимостями, конфиги сборки
-  (`electron.vite.config.ts`, `electron-builder*.yml`), значки в `resources/`. Кода здесь нет.
-- `shared/src` — весь код. Его собирает `apps/oats`; здесь же будет общий код других приложений на этой основе.
+  (`electron.vite.config.ts`, `electron-builder*.yml`), значки в `resources/` и профиль продукта в `src/`:
+  имя, схема ссылок, встроенные шаблоны и рецепты (`product.ts`), всё, что говорится модели (`prompts.ts`),
+  и точки входа, которые передают профиль общему коду.
+- `shared/src` — остальной код. Он не знает, какое приложение его собирает: имя, тексты для модели и набор
+  функций берёт из профиля (`product`).
 - `native/`, `scripts/` — нативные части и скрипты, общие.
 
 Команды запускаются из корня (`npm run dev`, `npm test`, `npm run dist:mac`): корневой `package.json`

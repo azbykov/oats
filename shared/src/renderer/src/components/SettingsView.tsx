@@ -8,6 +8,7 @@ import { AccountsSettings } from './Accounts'
 import { IntegrationsSettings } from './Integrations'
 import { PermissionsList } from './Permissions'
 import { Button } from './ui'
+import { localTranscription, product } from '../lib/product'
 
 type Tab = 'general' | 'setup' | 'accounts' | 'integrations' | 'ai' | 'transcription' | 'calendar'
 
@@ -89,7 +90,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
         <div className="mx-auto w-full max-w-2xl px-6">
           <h1 className="mb-4 font-display text-[28px] tracking-tight text-ink-strong">Settings</h1>
           <div className="mb-4 flex gap-0.5 rounded-xl bg-fill-soft p-0.5">
-            {TABS.map((t) => (
+            {TABS.filter((t) => t.id !== 'integrations' || product.features.notion).map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -127,7 +128,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
             {tab === 'setup' && (
               <Row
                 label="Status"
-                hint="What Oats needs to take notes. It is checked at every launch; when something stops working, a card appears in the sidebar."
+                hint={`What ${product.name} needs to take notes. It is checked at every launch; when something stops working, a card appears in the sidebar.`}
               >
                 <SetupChecklist />
                 <div>
@@ -141,7 +142,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
             {tab === 'accounts' && (
               <Row
                 label="Accounts"
-                hint={`Sign in with Google or Yandex to see their calendars in Coming up. Oats only reads calendars; sign-in tokens are encrypted on ${thisComputer}.`}
+                hint={`Sign in with Google or Yandex to see their calendars in Coming up. ${product.name} only reads calendars; sign-in tokens are encrypted on ${thisComputer}.`}
               >
                 <AccountsSettings />
               </Row>
@@ -150,7 +151,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
             {tab === 'integrations' && (
               <Row
                 label="Notion"
-                hint={`Save notes to a Notion database: the open tab of a note goes to its own page, and saving again updates it. The sign-in token is encrypted on ${thisComputer}; to take Oats’ access away completely, remove it in Notion → Settings → Connections.`}
+                hint={`Save notes to a Notion database: the open tab of a note goes to its own page, and saving again updates it. The sign-in token is encrypted on ${thisComputer}; to take ${product.name}’s access away completely, remove it in Notion → Settings → Connections.`}
               >
                 <IntegrationsSettings />
               </Row>
@@ -280,6 +281,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
 
             {tab === 'transcription' && (
               <>
+                {product.features.cloudTranscription && (
                 <Row label="Speech-to-text">
                   <div className="flex gap-2">
                     {(
@@ -298,7 +300,8 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                     ))}
                   </div>
                 </Row>
-                {settings.transcriptionProvider === 'whisper' ? (
+                )}
+                {localTranscription(settings) ? (
                   <Row
                     label="Whisper model"
                     hint={
@@ -406,7 +409,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
                 </Row>
                 <Row
                   label="Detect meetings"
-                  hint={`Offers to take notes when Zoom, Teams, ${isMac ? 'FaceTime, ' : ''}Slack or a browser call starts using the microphone${isMac ? ' (macOS 14.2+)' : ''}. When Oats isn’t in front, a card appears in the top-right corner of the screen.`}
+                  hint={`Offers to take notes when Zoom, Teams, ${isMac ? 'FaceTime, ' : ''}Slack or a browser call starts using the microphone${isMac ? ' (macOS 14.2+)' : ''}. When ${product.name} isn’t in front, a card appears in the top-right corner of the screen.`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <label className="flex items-center gap-2 text-[13px] text-ink-primary">
@@ -499,7 +502,7 @@ export function SettingsView({ initialTab }: { initialTab?: Tab }) {
             )}
           </div>
           <div className="mt-3 select-text text-center text-[11px] text-ink-tertiary tabular-nums">
-            Oats {__APP_VERSION__}
+            {product.name} {__APP_VERSION__}
             {import.meta.env.DEV && ' · dev'}
           </div>
         </div>

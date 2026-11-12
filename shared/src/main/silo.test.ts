@@ -3,8 +3,28 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BUILT_IN_RECIPES, BUILT_IN_TEMPLATES, DEFAULT_SETTINGS } from '../common/defaults'
+import { DEFAULT_SETTINGS } from '../common/defaults'
+import type { Product, Prompts } from '../common/product'
 import type { Note, NoteRecord, Panel, Recipe, Template, TranscriptSegment } from '../common/types'
+
+// An app of the tests' own: the store only cares that built-in templates and recipes come
+// first and are never saved.
+const BUILT_IN_TEMPLATES: Template[] = [
+  { id: 'auto', title: 'Auto', description: 'Built in', builtIn: true, sections: [] },
+  { id: 'general', title: 'General', description: 'Built in', builtIn: true, sections: [{ heading: 'H', instructions: 'I' }] }
+]
+const BUILT_IN_RECIPES: Recipe[] = [{ id: 'tldr', slug: 'tldr', title: 'TL;DR', prompt: 'Sum it up.', builtIn: true }]
+const PRODUCT: Product = {
+  name: 'Test',
+  protocol: 'test',
+  modelsFolder: 'Test',
+  settings: {},
+  templates: BUILT_IN_TEMPLATES,
+  recipes: BUILT_IN_RECIPES,
+  features: { notion: true, cloudTranscription: true },
+  notion: { databaseTitle: 'Test Notes', idProperty: 'Test ID' }
+}
+const PROMPTS: Prompts = { enhance: () => ({ system: '', messages: [] }), chat: () => ({ system: '', messages: [] }) }
 
 // The silo's client (silo.ts) and the database behind it (silo/store.ts), joined without the
 // process in between. Both keep module state (the connection, the unlocked API keys), so every
@@ -33,6 +53,7 @@ async function launch(): Promise<Store> {
   await current?.closeSilo()
   vi.resetModules()
   const { api } = await import('../silo/store')
+  ;(await import('./product')).setProduct(PRODUCT, PROMPTS)
   current = await import('./silo')
   // Requests and replies are copied on the way, as they are between the two processes.
   await current.startSilo(async (method, args) =>

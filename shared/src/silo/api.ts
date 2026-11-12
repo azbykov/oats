@@ -1,4 +1,4 @@
-import type { AppData, DataOp, Settings, Template } from '../common/types'
+import type { AppData, DataOp, Recipe, Settings, Template } from '../common/types'
 
 // What the main process and the silo (the database's own process) say to each other.
 // The main process sends a request per call and gets one reply; requests are answered in
@@ -22,12 +22,20 @@ export interface NoteForIndex {
   segments: { speaker: string; speaker_id: string | null; text: string; start_ms: number; end_ms: number }[]
 }
 
+/** What the app starts with: its settings and its built-in templates and recipes. */
+export interface Defaults {
+  settings: Settings
+  templates: Template[]
+  recipes: Recipe[]
+}
+
 export interface SiloApi {
   /**
    * Opens the database in this userData folder; the first request the silo gets. `key` is
    * what it is encrypted with (64 hex digits), or null where there is no keychain to keep one.
+   * `defaults` are the app's own: the silo doesn't know which app it serves.
    */
-  open(userData: string, key: string | null): void
+  open(userData: string, key: string | null, defaults: Defaults): void
   close(): void
   loadState(): { settings: Settings; templates: Template[] }
   loadData(): AppData

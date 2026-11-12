@@ -1,6 +1,7 @@
 import type { AccountCalendar, CalendarEvent } from '../common/types'
 import { ApiError, request, type CalendarApi } from './calendar-api'
 import { meetingLink } from './ics'
+import { product } from './product'
 
 // Google Calendar API v3 with the calendar.readonly scope.
 
@@ -9,7 +10,7 @@ const API = 'https://www.googleapis.com/calendar/v3'
 // Google's consent screen lets the user untick single permissions; without the
 // calendar one sign-in succeeds but every Calendar API call is refused.
 const NO_CALENDAR_SCOPE =
-  'Oats wasn’t allowed to see your calendars. Sign in again and tick the calendar permission on the Google consent screen.'
+  `${product.name} wasn’t allowed to see your calendars. Sign in again and tick the calendar permission on the Google consent screen.`
 
 interface GoogleEvent {
   id: string

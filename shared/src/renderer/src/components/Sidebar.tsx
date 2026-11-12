@@ -9,6 +9,7 @@ import { Logo } from './Logo'
 import { Avatar, DancingBars, IconButton, Kbd } from './ui'
 import { SetupCard } from './Setup'
 import { UpdateCard } from './UpdateCard'
+import { product } from '../lib/product'
 
 function NavItem({
   icon,
@@ -69,7 +70,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2 font-display text-[16px] font-semibold tracking-tight text-ink-strong">
           {/* no-drag: a drag region swallows the hover that wiggles the logo. */}
           <Logo busy={enhancing} className="no-drag size-5" />
-          Oats
+          {product.name}
         </div>
         <IconButton label="New note" onClick={() => navigate({ view: 'note', id: createNote().id })}>
           <SquarePen size={16} />

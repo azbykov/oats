@@ -12,7 +12,7 @@ import type {
 import {
   createDatabase,
   databaseTarget,
-  findOatsDatabase,
+  findDatabase,
   NotionError,
   notionRequest,
   NotionTargetLost,
@@ -24,6 +24,7 @@ import {
 } from './notion'
 import { authorizeNotion, isConfigured, OAuthError, refreshTokens, type Tokens } from './oauth'
 import { seal, unseal } from './sealed'
+import { product } from './product'
 
 // Connected workspaces of the tools notes are sent to (for now, Notion). Like the
 // accounts, they live apart from the notes database and their tokens never leave
@@ -157,7 +158,7 @@ export async function connectNotion(): Promise<Integration> {
   if (!target && sameWorkspace && existing.notion) {
     target = await lookup('database check', () => databaseTarget(call, existing.notion!.databaseId))
   }
-  target ??= await lookup('database search', () => findOatsDatabase(call))
+  target ??= await lookup('database search', () => findDatabase(call))
 
   const integration: StoredIntegration = {
     id: existing?.id ?? randomUUID(),
@@ -212,7 +213,7 @@ export async function saveToNotion(req: NotionSaveRequest): Promise<NotionPageRe
     return ref
   } catch (err) {
     if (err instanceof NotionTargetLost) {
-      const message = `Oats can’t reach “${target.title}” in Notion. Choose where to save notes again.`
+      const message = `${product.name} can’t reach “${target.title}” in Notion. Choose where to save notes again.`
       update(integration.id, { notion: undefined, error: message })
       throw new Error(message)
     }

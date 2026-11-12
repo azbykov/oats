@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { ASR_MODELS, DEFAULT_MODEL, GGML_DIR } from '../common/asr-models'
 import type { AsrEvent, WhisperModel } from '../common/types'
 import { audioEngine, audioHelper, NOT_INSTALLED, spawnAudio } from './sidecar'
+import { product } from './product'
 
 // Local Whisper transcription through `oats-audio listen` (WhisperKit on Apple
 // Silicon, whisper.cpp elsewhere). One long-lived process serves both channels
@@ -13,7 +14,7 @@ import { audioEngine, audioHelper, NOT_INSTALLED, spawnAudio } from './sidecar'
 const whisperModels = () => ASR_MODELS[audioEngine()]
 
 // Independent of userData so test profiles (OATS_USER_DATA) share downloads.
-const modelsDir = () => join(app.getPath('appData'), 'Oats', 'models')
+const modelsDir = () => join(app.getPath('appData'), product.modelsFolder, 'models')
 export const whisperModelsDir = modelsDir
 const modelFolder = (id: string) =>
   audioEngine() === 'whisperkit'

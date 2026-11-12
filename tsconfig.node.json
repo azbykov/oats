@@ -6,7 +6,7 @@
     "paths": { "better-sqlite3-multiple-ciphers": ["./node_modules/better-sqlite3-multiple-ciphers/index.d.ts"] }
   },
   "include": [
-    "apps/*/electron.vite.config.ts",
+    "apps/*/electron.vite.config.ts", "apps/*/src/*.ts",
     "shared/src/main/**/*", "shared/src/sidecar/**/*", "shared/src/silo/**/*", "shared/src/preload/**/*", "shared/src/common/**/*"
   ]
 }

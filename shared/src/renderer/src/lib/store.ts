@@ -14,6 +14,7 @@ import type {
   TranscriptSegment
 } from '../../../common/types'
 import { changes } from './persist'
+import { product } from './product'
 
 export type Route =
   | { view: 'home' }
@@ -136,7 +137,7 @@ export const useStore = create<State>((set, get) => {
       const [data, accounts, integrations] = await Promise.all([
         window.oats.loadData(),
         window.oats.listAccounts(),
-        window.oats.listIntegrations()
+        product.features.notion ? window.oats.listIntegrations() : []
       ])
       set({ data, accounts, integrations })
     },

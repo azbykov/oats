@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { BUILT_IN_RECIPES, BUILT_IN_TEMPLATES, DEFAULT_SETTINGS } from '../common/defaults'
 import type {
   AppData,
   DataOp,
@@ -14,7 +13,7 @@ import type {
   Template,
   TranscriptSegment
 } from '../common/types'
-import { withoutSecrets, type SiloApi, type StoredChunk } from './api'
+import { withoutSecrets, type Defaults, type SiloApi, type StoredChunk } from './api'
 
 // The database itself, run inside the silo process (index.ts) and nowhere else.
 // SQLite in WAL mode, encrypted as a whole with SQLCipher (better-sqlite3-multiple-ciphers):
@@ -27,6 +26,8 @@ import { withoutSecrets, type SiloApi, type StoredChunk } from './api'
 let dir = ''
 /** 64 hex digits, or null on a computer without a keychain: the database is then left unencrypted. */
 let key: string | null = null
+/** The app's default settings and built-in templates and recipes, given with open(). */
+let defaults: Defaults = { settings: {} as Settings, templates: [], recipes: [] }
 const dbFile = () => join(dir, 'oats.db')
 /** The database as it was before it was encrypted; removed BACKUP_DAYS later. */
 const backupFile = () => join(dir, 'oats-unencrypted.db.bak')
@@ -163,11 +164,12 @@ let db: Db | undefined
  * exactly as it is and the error goes back to the main process: this is the only copy of
  * the notes, so nothing here ever deletes or recreates it.
  */
-function openStore(userData: string, withKey: string | null) {
+function openStore(userData: string, withKey: string | null, appDefaults: Defaults) {
   if (withKey !== null && !/^[0-9a-f]{64}$/.test(withKey)) throw new Error('The database key is not valid.')
   closeStore()
   dir = userData
   key = withKey
+  defaults = appDefaults
   open()
 }
 
@@ -462,8 +464,8 @@ function loadState() {
     parse<Template>(r.data, null!)
   )
   return {
-    settings: { ...DEFAULT_SETTINGS, ...parse<Partial<Settings>>(settingsRow?.value, {}) } as Settings,
-    templates: [...BUILT_IN_TEMPLATES, ...userTemplates]
+    settings: { ...defaults.settings, ...parse<Partial<Settings>>(settingsRow?.value, {}) } as Settings,
+    templates: [...defaults.templates, ...userTemplates]
   }
 }
 
@@ -540,7 +542,7 @@ function loadData(): AppData {
     notes,
     folders,
     templates: state.templates,
-    recipes: [...BUILT_IN_RECIPES, ...userRecipes],
+    recipes: [...defaults.recipes, ...userRecipes],
     settings: state.settings
   }
 }
@@ -652,7 +654,7 @@ function importLegacyJson(d: Db) {
     putFolders(legacy.folders ?? [])
     putList('templates', legacy.templates ?? [])
     putList('recipes', legacy.recipes ?? [])
-    putSettings({ ...DEFAULT_SETTINGS, ...legacy.settings })
+    putSettings({ ...defaults.settings, ...legacy.settings })
     d.prepare("INSERT INTO meta (key, value) VALUES ('imported-json', ?)").run(new Date().toISOString())
   })
   renameSync(legacyFile(), `${legacyFile()}.bak`)
