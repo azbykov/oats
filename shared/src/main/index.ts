@@ -451,6 +451,8 @@ app.whenReady().then(async () => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send('semantic:status', status)
   })
   startUpdateChecks()
+  // Audio still waiting for recovery is deleted once it is older than the app allows.
+  setInterval(() => recordings.expire().catch(() => {}), 3600_000).unref()
   // Audio capture doesn't survive sleep; the renderer stops transcription cleanly first.
   powerMonitor.on('suspend', () => win?.webContents.send('system:suspend'))
   nativeTheme.on('updated', syncWindowColors)

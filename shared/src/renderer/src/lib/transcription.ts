@@ -1,4 +1,5 @@
 import type { Settings, Speaker } from '../../../common/types'
+import { cloudTranscription, type CloudChannel } from './cloud'
 import { ChannelRecorder, LiveMic, matchMicrophone, microphones, PcmTap } from './capture'
 import { isMac } from './platform'
 import { localTranscription } from './product'
@@ -6,19 +7,10 @@ import { processSession } from './postprocess'
 import { uid, useStore } from './store'
 
 // Two audio sources are transcribed: the microphone ("Me") and system output
-// ("Them"), either against Deepgram's live API or with Whisper running locally
-// in the native sidecar (channel 0 = mic, 1 = system).
+// ("Them"), with Whisper running locally in the native sidecar (channel 0 = mic,
+// 1 = system) or, in an app that offers it, against a cloud service's live API (cloud.ts).
 
-interface Channel {
-  speaker: Speaker
-  stream: MediaStream
-  ws: WebSocket
-  recorder: MediaRecorder | null
-  keepAlive: number
-  closing: boolean
-}
-
-let channels: Channel[] = []
+let channels: CloudChannel[] = []
 let ownedStreams: MediaStream[] = []
 let liveMic: LiveMic | null = null
 let taps = new Map<MediaStream, PcmTap>()
@@ -43,88 +35,6 @@ const hearNow = () => {
 export const silentFor = (speaker?: Speaker) =>
   Date.now() - (speaker ? heard[speaker] : Math.max(heard.me, heard.them))
 const speakerOf = (channel: number): Speaker => (channel === 1 ? 'them' : 'me')
-
-// ---- Deepgram ----
-
-function listenUrl(language: string) {
-  const params = new URLSearchParams({
-    model: 'nova-3',
-    language: language || 'multi',
-    smart_format: 'true',
-    punctuate: 'true',
-    interim_results: 'true',
-    endpointing: '300'
-  })
-  return `wss://api.deepgram.com/v1/listen?${params}`
-}
-
-function openChannel(
-  speaker: Speaker,
-  stream: MediaStream,
-  apiKey: string,
-  language: string,
-  noteId: string,
-  rec?: ChannelRecorder
-) {
-  const ws = new WebSocket(listenUrl(language), ['token', apiKey])
-  const channel: Channel = { speaker, stream, ws, recorder: null, keepAlive: 0, closing: false }
-  const { appendTranscript, setPartial, setRecording } = useStore.getState()
-
-  ws.onopen = () => {
-    const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) ws.send(e.data)
-    }
-    recorder.start(250)
-    rec?.start()
-    channel.recorder = recorder
-    channel.keepAlive = window.setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'KeepAlive' }))
-    }, 8000)
-    setRecording({ status: 'recording' })
-  }
-
-  ws.onmessage = (msg) => {
-    const data = JSON.parse(String(msg.data))
-    if (data.type !== 'Results') return
-    const text: string = data.channel?.alternatives?.[0]?.transcript ?? ''
-    if (text.trim()) heard[speaker] = Date.now()
-    if (data.is_final) {
-      setPartial(speaker, '')
-      if (text.trim()) {
-        const words: { punctuated_word?: string; word: string; start: number; end: number }[] =
-          data.channel.alternatives[0].words ?? []
-        appendTranscript(noteId, {
-          id: uid(),
-          speaker,
-          text: text.trim(),
-          start: baseOffset + Math.round(data.start * 1000),
-          end: baseOffset + Math.round((data.start + data.duration) * 1000),
-          words: words.map((w) => ({
-            text: w.punctuated_word ?? w.word,
-            start: baseOffset + Math.round(w.start * 1000),
-            end: baseOffset + Math.round(w.end * 1000)
-          }))
-        })
-      }
-    } else {
-      setPartial(speaker, text)
-    }
-  }
-
-  ws.onclose = (e) => {
-    window.clearInterval(channel.keepAlive)
-    if (channel.recorder?.state === 'recording') channel.recorder.stop()
-    if (!channel.closing) {
-      const reason =
-        e.code === 1008 || e.code === 4001 ? 'Deepgram rejected the API key.' : `Transcription disconnected (${e.code}).`
-      markFailed()
-      stopTranscription()
-      useStore.getState().setRecording({ status: 'error', error: reason })
-    }
-  }
-  return channel
-}
 
 // ---- Local Whisper ----
 
@@ -357,8 +267,9 @@ export async function startTranscription(noteId: string) {
     keepAudioBackup,
     micSource
   } = data.settings
-  const local = localTranscription(data.settings)
-  if (!local && !deepgramApiKey) {
+  const cloud = localTranscription(data.settings) ? null : cloudTranscription()
+  const local = !cloud
+  if (cloud && !deepgramApiKey) {
     setRecording({ noteId, status: 'error', error: 'Add a Deepgram API key in Settings → Transcription.' })
     return
   }
@@ -409,12 +320,28 @@ export async function startTranscription(noteId: string) {
 
     const streams: { speaker: Speaker; stream: MediaStream }[] = [{ speaker: 'me', stream: mic }]
     if (system) streams.push({ speaker: 'them', stream: system })
-    if (local) {
-      await startWhisper(noteId, streams)
-    } else {
+    if (cloud) {
       for (const { speaker, stream } of streams) {
-        channels.push(openChannel(speaker, stream, deepgramApiKey, language, noteId, recorderFor(speaker)))
+        channels.push(
+          cloud.open({
+            speaker,
+            stream,
+            apiKey: deepgramApiKey,
+            language,
+            noteId,
+            offset: baseOffset,
+            recorder: recorderFor(speaker),
+            onHeard: () => (heard[speaker] = Date.now()),
+            onDropped: (reason) => {
+              markFailed()
+              stopTranscription()
+              useStore.getState().setRecording({ status: 'error', error: reason })
+            }
+          })
+        )
       }
+    } else {
+      await startWhisper(noteId, streams)
     }
     setRecording({ systemAudio: !!system })
     startMeter(system ? [mic, system] : [mic])
@@ -449,14 +376,7 @@ export function stopTranscription() {
     // Local Whisper finalises the last utterance a little later than Deepgram.
     processSession({ ...ended, end, settleMs: local ? 5000 : 2000 })
   }
-  for (const c of channels) {
-    c.closing = true
-    window.clearInterval(c.keepAlive)
-    if (c.recorder?.state === 'recording') c.recorder.stop()
-    if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: 'CloseStream' }))
-    // Give Deepgram a moment to flush the final results before closing.
-    window.setTimeout(() => c.ws.close(), 1500)
-  }
+  for (const c of channels) c.close()
   channels = []
   ownedStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()))
   ownedStreams = []

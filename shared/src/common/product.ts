@@ -24,6 +24,12 @@ export interface Product {
   templates: Template[]
   recipes: Recipe[]
   features: ProductFeatures
+  /**
+   * Days a session's audio may wait on disk for its transcript to be rebuilt (live
+   * transcription failed and so did every retry since); then it is deleted, recovered or
+   * not. Left out: it waits for as long as it takes.
+   */
+  audioRetentionDays?: number
   /** The Notion database notes are saved to, and the property that holds a note's id. */
   notion: { databaseTitle: string; idProperty: string }
 }
