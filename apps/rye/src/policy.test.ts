@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { expect, test } from 'vitest'
 import { DEFAULT_SETTINGS } from '../../../shared/src/common/defaults'
 import { product } from './product'
@@ -33,7 +33,8 @@ function reachable(entry: string) {
       if (found) queue.push(found)
     }
   }
-  return [...seen].map((f) => relative(root, f))
+  // Forward slashes on every platform, so the paths below read the same on Windows.
+  return [...seen].map((f) => relative(root, f).split(sep).join('/'))
 }
 
 const windowEntry = join(__dirname, 'renderer/main.tsx')
