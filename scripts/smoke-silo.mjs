@@ -3,14 +3,15 @@
 // (ELECTRON_RUN_AS_NODE), writes a database with a key the way the silo does
 // (shared/src/silo/store.ts) and reads it back. Catches a native binary that was left out of the
 // package, kept inside app.asar, or can't load on this system: any of those would stop
-// Oats from opening anyone's notes.
+// the app from opening anyone's notes.
 //
-//   node scripts/smoke-silo.mjs <dist/win-unpacked | dist/mac-arm64/Oats.app>
+//   node scripts/smoke-silo.mjs <dist/win-unpacked | dist/mac-arm64/Oats.app | dist/rye/mac-arm64/Rye.app>
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { appExecutable } from './app-exe.mjs'
 
 const appDir = process.argv[2] && resolve(process.argv[2])
 if (!appDir) {
@@ -19,7 +20,7 @@ if (!appDir) {
 }
 
 const mac = appDir.endsWith('.app')
-const exe = mac ? join(appDir, 'Contents', 'MacOS', 'Oats') : join(appDir, 'Oats.exe')
+const exe = appExecutable(appDir)
 const resources = mac ? join(appDir, 'Contents', 'Resources') : join(appDir, 'resources')
 
 const fail = (message) => {
