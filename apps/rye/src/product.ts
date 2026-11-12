@@ -5,8 +5,9 @@ import type { Recipe, Template } from '../../../shared/src/common/types'
 // in prompts.ts; the build's side of it (app id, icons, permission texts) is in
 // electron-builder.yml.
 //
-// For now Rye is Oats under its own name: the templates, recipes and features below are
-// copies of apps/oats/src/product.ts, to be replaced as Rye gets its own.
+// The templates and recipes below are still copies of apps/oats/src/product.ts, to be
+// replaced as Rye gets its own. What Rye must not do is already its own: see `settings`
+// and `features` at the end, and policy.test.ts, which holds them in place.
 
 const templates: Template[] = [
   {
@@ -133,9 +134,18 @@ export const product: Product = {
   // Shared with Oats on purpose: the models are the same files and hold nothing personal,
   // so a computer with both apps downloads them once.
   modelsFolder: 'Oats',
-  settings: {},
+  // A session's audio is health data and lies unencrypted while it is on disk, so no more
+  // of it is kept than the work needs: the other side's channel while speakers are being
+  // separated, and nothing for rebuilding a transcript that failed live.
+  settings: { keepAudioBackup: false },
+  // Audio whose transcript couldn't be rebuilt gets three days of retries (a weekend without
+  // the model downloaded), then goes: a lost transcript is the smaller harm.
+  audioRetentionDays: 3,
   templates,
   recipes,
-  features: { notion: true, cloudTranscription: true },
+  // Nothing a client said leaves the computer on its own: no audio to a transcription
+  // service, no notes to Notion. The window's entry doesn't import the code that streams
+  // audio either (renderer/install.ts), and its page may connect to nothing (index.html).
+  features: { notion: false, cloudTranscription: false },
   notion: { databaseTitle: 'Rye Notes', idProperty: 'Rye ID' }
 }

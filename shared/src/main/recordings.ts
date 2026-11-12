@@ -1,9 +1,10 @@
 import { app } from 'electron'
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, type WriteStream } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, type WriteStream } from 'node:fs'
 import { open, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { DiarizationResult, RecordingMeta, RecoveredSegment } from '../common/types'
 import { readyModel, whisperModelsDir } from './asr'
+import { product } from './product'
 import { audioHelper, NOT_INSTALLED, runAudio } from './sidecar'
 
 // Local audio backup for each recording session, one 16 kHz mono WAV per channel.
@@ -20,6 +21,8 @@ const wavPath = (id: string) => join(dir(), `${id}.wav`)
 const metaPath = (id: string) => join(dir(), `${id}.json`)
 
 const active = new Map<string, { stream: WriteStream; bytes: number; meta: RecordingMeta }>()
+/** Result files the audio helper is writing right now, by name. */
+const pending = new Set<string>()
 
 export function begin(meta: RecordingMeta) {
   mkdirSync(dir(), { recursive: true })
@@ -99,6 +102,7 @@ async function withSidecar<T>(
   // Less than ~2 s of audio has nothing useful in it.
   if (dataBytes < SAMPLE_RATE * 2 * 2) throw new Error('Not enough audio.')
   const out = `${wavPath(id)}.${Date.now()}.out.json`
+  pending.add(basename(out))
   try {
     await runAudio(args(wavPath(id), out), { timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024, signal })
     return JSON.parse(await readFile(out, 'utf8')) as T
@@ -107,6 +111,7 @@ async function withSidecar<T>(
     throw sidecarError(err)
   } finally {
     await rm(out, { force: true })
+    pending.delete(basename(out))
   }
 }
 
@@ -150,20 +155,57 @@ export async function remove(id: string) {
   await rm(metaPath(id), { force: true })
 }
 
-/** Recordings left from a previous run (the app quit or crashed before processing). */
-export function leftovers(): RecordingMeta[] {
-  if (!existsSync(dir())) return []
-  const out: RecordingMeta[] = []
+/** The recording has waited for recovery longer than the app allows (Product.audioRetentionDays). */
+function expired(meta: RecordingMeta) {
+  const days = product.audioRetentionDays
+  if (days === undefined) return false
+  // A date that can't be read doesn't make the audio immortal.
+  const age = Date.now() - Date.parse(meta.startedAt)
+  return !(age < days * 24 * 3600_000)
+}
+
+/** Deletes recordings that have outlived the app's limit; the app may run for weeks between starts. */
+export async function expire() {
+  if (product.audioRetentionDays === undefined || !existsSync(dir())) return
   for (const f of readdirSync(dir())) {
     if (!f.endsWith('.json')) continue
     const id = f.slice(0, -5)
-    if (active.has(id) || !existsSync(wavPath(id))) continue
+    if (active.has(id)) continue
     try {
-      out.push(JSON.parse(readFileSync(metaPath(id), 'utf8')) as RecordingMeta)
+      // A file the audio helper has open on Windows can't be deleted yet: next time.
+      if (expired(JSON.parse(readFileSync(metaPath(id), 'utf8')) as RecordingMeta)) await remove(id)
     } catch {
-      // unreadable metadata: leave the file for manual inspection
+      // not a recording's metadata, or unreadable: leftovers() deals with those
     }
   }
+}
+
+/**
+ * Recordings left from a previous run (the app quit or crashed before processing).
+ * Everything else in the folder is deleted: audio without readable metadata can't be
+ * recovered, and a result the helper was writing when the app died holds transcript text;
+ * neither would ever be removed otherwise. So is a recording past the app's limit.
+ */
+export function leftovers(): RecordingMeta[] {
+  if (!existsSync(dir())) return []
+  const files = readdirSync(dir())
+  const keep = new Set(pending)
+  for (const id of active.keys()) keep.add(`${id}.wav`).add(`${id}.json`)
+  const out: RecordingMeta[] = []
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue
+    const id = f.slice(0, -5)
+    if (active.has(id) || !files.includes(`${id}.wav`)) continue
+    try {
+      const meta = JSON.parse(readFileSync(metaPath(id), 'utf8')) as RecordingMeta
+      if (expired(meta)) continue
+      out.push(meta)
+      keep.add(f).add(`${id}.wav`)
+    } catch {
+      // unreadable metadata: nothing says which note the audio belongs to
+    }
+  }
+  for (const f of files) if (!keep.has(f)) rmSync(join(dir(), f), { recursive: true, force: true })
   return out
 }
 
